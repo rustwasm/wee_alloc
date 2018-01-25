@@ -21,9 +21,9 @@ env:
 
 before_script:
   - rustup target add wasm32-unknown-unknown
-  - cargo install --git https://github.com/alexcrichton/wasm-gc
-  - cargo install cargo-readme
-  - git clone https://github.com/WebAssembly/binaryen.git
+  - which wasm-gc || cargo install --git https://github.com/alexcrichton/wasm-gc
+  - which cargo-readme || cargo install cargo-readme
+  - test -d binaryen || git clone https://github.com/WebAssembly/binaryen.git
   - cd ./binaryen && cmake . && make -j2 && cd -
   - export PATH="$PATH:$(pwd)/binaryen/bin"
 
