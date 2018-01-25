@@ -13,10 +13,6 @@ addons:
       - 'cmake'
       - 'g++-5'
 
-cache:
-  directories:
-    - "$HOME/binaryen"
-
 env:
   matrix:
     - SCRIPT="./check.sh"
