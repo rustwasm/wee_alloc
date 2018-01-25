@@ -27,4 +27,4 @@ before_script:
   - export PATH="$PATH:$(pwd)/binaryen/bin"
 
 script:
-  - ./ci/script.sh
+  - "$SCRIPT"
