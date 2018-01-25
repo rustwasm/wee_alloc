@@ -1,0 +1,16 @@
+[package]
+authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+license = "MPL-2.0"
+name = "wee_alloc"
+readme = "./README.md"
+repository = "https://github.com/fitzgen/wee_alloc"
+version = "0.1.0"
+
+[features]
+default = ["size_classes"]
+extra_assertions = []
+size_classes = []
+
+[target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
+default-features = false
+version = "0.2"

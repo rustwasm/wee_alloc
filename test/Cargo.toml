@@ -1,0 +1,16 @@
+[package]
+authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+name = "wee_alloc_test"
+version = "0.1.0"
+
+[dependencies]
+rand = "0.4.2"
+quickcheck = "0.6.0"
+
+[dependencies.wee_alloc]
+path = "../wee_alloc"
+default-features = false
+
+[features]
+size_classes = ["wee_alloc/size_classes"]
+extra_assertions = ["wee_alloc/extra_assertions"]

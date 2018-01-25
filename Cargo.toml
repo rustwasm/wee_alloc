@@ -1,0 +1,6 @@
+[workspace]
+members = ["./wee_alloc", "./test", "./example"]
+
+[profile.release]
+debug = true
+opt-level = "z"

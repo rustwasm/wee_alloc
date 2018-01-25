@@ -1,0 +1,14 @@
+[package]
+name = "wee_alloc_example"
+version = "0.1.0"
+authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+
+[dependencies.wee_alloc]
+path = "../wee_alloc"
+default-features = false
+
+[features]
+size_classes = ["wee_alloc/size_classes"]
+
+[lib]
+crate-type = ["cdylib"]
