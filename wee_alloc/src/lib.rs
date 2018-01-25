@@ -60,9 +60,9 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 // WebAssembly.
 #[lang = "panic_fmt"]
 extern "C" fn panic_fmt(
-_args: ::core::fmt::Arguments,
-_file: &'static str,
-_line: u32
+    _args: ::core::fmt::Arguments,
+    _file: &'static str,
+    _line: u32
 ) -> ! {
     use core::intrinsics;
     unsafe {
