@@ -13,6 +13,10 @@ addons:
       - 'cmake'
       - 'g++-5'
 
+cache:
+  directories:
+    - "$HOME/binaryen"
+
 env:
   matrix:
     - SCRIPT="./check.sh"
@@ -23,9 +27,9 @@ before_script:
   - rustup target add wasm32-unknown-unknown
   - which wasm-gc || cargo install --git https://github.com/alexcrichton/wasm-gc
   - which cargo-readme || cargo install cargo-readme
-  - test -d binaryen || git clone https://github.com/WebAssembly/binaryen.git
-  - export PATH="$PATH:$(pwd)/binaryen/bin"
-  - which wasm-opt || (cd ./binaryen && cmake . && make -j4 && cd -)
+  - test -d "$HOME/binaryen" || git clone https://github.com/WebAssembly/binaryen.git "$HOME/binaryen"
+  - export PATH="$PATH:$HOME/binaryen/bin"
+  - which wasm-opt || (cd "$HOME/binaryen" && cmake . && make -j4 && cd -)
 
 script:
   - "$SCRIPT"
