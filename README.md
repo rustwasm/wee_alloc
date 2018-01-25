@@ -1,5 +1,10 @@
 # `wee_alloc`
 
+[![](https://docs.rs/wee_alloc/badge.svg)](https://docs.rs/wee_alloc/)
+[![](https://img.shields.io/crates/v/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
+[![](https://img.shields.io/crates/d/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
+[![Build Status](https://travis-ci.org/fitzgen/wee_alloc.svg?branch=master)](https://travis-ci.org/fitzgen/wee_alloc)
+
 `wee_alloc`: The **W**asm-**E**nabled, **E**lfin Allocator.
 
 - **Elfin, i.e. small:** Generates less than a kilobyte of uncompressed
