@@ -86,7 +86,7 @@ You can install the latest version of `rustfmt` with this command:
 
 ```
 $ rustup update
-$ rustup component add rls-preview
+$ rustup component add rustfmt-preview
 ```
 
 Ensure that `~/.rustup/toolchains/$YOUR_HOST_TARGET/bin/` is on your `$PATH`.
