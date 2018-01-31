@@ -18,7 +18,6 @@ unsafe fn get_base_pointer() -> *mut u8 {
     (current_memory() * PAGE_SIZE.0) as _
 }
 
-#[inline]
 pub(crate) unsafe fn alloc_pages(n: Pages) -> *mut u8 {
     let ptr = get_base_pointer();
     assert_is_word_aligned(ptr);
@@ -31,7 +30,7 @@ pub(crate) struct Exclusive<T> {
     inner: UnsafeCell<T>,
 
     #[cfg(feature = "extra_assertions")]
-    in_use: bool,
+    in_use: Cell<bool>,
 }
 
 impl<T: ConstInit> ConstInit for Exclusive<T> {
@@ -39,13 +38,25 @@ impl<T: ConstInit> ConstInit for Exclusive<T> {
         inner: UnsafeCell::new(T::INIT),
 
         #[cfg(feature = "extra_assertions")]
-        in_use: false,
+        in_use: Cell::new(false),
     };
 }
 
 extra_only! {
     fn assert_not_in_use<T>(excl: &Exclusive<T>) {
-        extra_assert!(!excl.in_use, "`Exclusive<T>` is not re-entrant");
+        assert!(!excl.in_use, "`Exclusive<T>` is not re-entrant");
+    }
+}
+
+extra_only! {
+    fn set_in_use<T>(excl: &Exclusive<T>) {
+        excl.in_use.set(true);
+    }
+}
+
+extra_only! {
+    fn set_not_in_use<T>(excl: &Exclusive<T>) {
+        excl.in_use.set(false);
     }
 }
 
@@ -56,12 +67,18 @@ impl<T> Exclusive<T> {
     ///
     /// It is the callers' responsibility to ensure that `f` does not re-enter
     /// this method for this `Exclusive` instance.
+    //
+    // XXX: If we don't mark this function inline, then it won't be, and the
+    // code size also blows up by about 200 bytes.
     #[inline]
     pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
     where
         F: FnOnce(&'a mut T) -> U
     {
         assert_not_in_use(self);
-        f(&mut *self.inner.get())
+        set_in_use(self);
+        let result = f(&mut *self.inner.get());
+        set_not_in_use(self);
+        result
     }
 }

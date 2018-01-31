@@ -8,8 +8,8 @@
 `wee_alloc`: The **W**asm-**E**nabled, **E**lfin Allocator.
 
 - **Elfin, i.e. small:** Generates less than a kilobyte of uncompressed
-  WebAssembly code. `wee_alloc` won't bloat your `.wasm` download size on the
-  Web.
+  WebAssembly code. Doesn't pull in the heavy panicking or formatting
+  infrastructure. `wee_alloc` won't bloat your `.wasm` download size on the Web.
 
 - **WebAssembly enabled:** Designed for the `wasm32-unknown-unknown` target and
   `#![no_std]`.
@@ -99,7 +99,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 - **size_classes**: On by default. Use size classes for smaller allocations to
   provide amortized *O(1)* allocation for them. Increases uncompressed `.wasm`
-  code size by about 400 bytes (up to a total ~950 bytes).
+  code size by about 450 bytes (up to a total of ~1.2K).
 
 - **extra_assertions**: Enable various extra, expensive integrity assertions and
   defensive mechanisms, such as poisoning freed memory. This incurs a large
@@ -113,24 +113,15 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 - The maximum alignment supported is word alignment.
 
-- Deallocation always pushes to the front of the free list, making it an *O(1)*
-  operation.
+- Deallocation is an *O(1)* operation.
 
-  The tradeoff is that physically adjacent cells `a` and `b` are never
-  re-unified into a single cell `ab` so that they could service a potential
-  allocation of size `n` where
+- `wee_alloc` will never return freed pages to the WebAssembly engine /
+  operating system. Currently, WebAssembly can only grow its heap, and can never
+  shrink it. All allocated pages are indefinitely kept in `wee_alloc`'s internal
+  free lists for potential future allocations, even when running on unix
+  targets.
 
-      size(max(size(a), size(b))) < n <= size(a) + size(b)
-
-  This leads to higher fragmentation and peak memory usage.
-
-  It also follows that `wee_alloc` will never return freed pages to the
-  WebAssembly engine / operating system. They are indefinitely kept in its
-  internal free lists for potential future allocations. Once a WebAssembly
-  module instance / process reaches peak page usage, its usage will remain at
-  that peak until finished.
-
-- `wee_alloc` uses a simple first-fit free list implementation. This means that
+- `wee_alloc` uses a simple, first-fit free list implementation. This means that
   allocation is an *O(n)* operation.
 
   Using the `size_classes` feature enables extra free lists dedicated to small
@@ -140,7 +131,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   uses the same first-fit routines that allocating from the main free list does,
   which avoids introducing more code bloat than necessary.
 
-Finally, here is a diagram giving an overview of how `wee_alloc` is implemented:
+Finally, here is a diagram giving an overview of `wee_alloc`'s implementation:
 
 ```
 +------------------------------------------------------------------------------+

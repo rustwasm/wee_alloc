@@ -8,8 +8,8 @@
 `wee_alloc`: The **W**asm-**E**nabled, **E**lfin Allocator.
 
 - **Elfin, i.e. small:** Generates less than a kilobyte of uncompressed
-  WebAssembly code. `wee_alloc` won't bloat your `.wasm` download size on the
-  Web.
+  WebAssembly code. Doesn't pull in the heavy panicking or formatting
+  infrastructure. `wee_alloc` won't bloat your `.wasm` download size on the Web.
 
 - **WebAssembly enabled:** Designed for the `wasm32-unknown-unknown` target and
   `#![no_std]`.
@@ -99,7 +99,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 - **size_classes**: On by default. Use size classes for smaller allocations to
   provide amortized *O(1)* allocation for them. Increases uncompressed `.wasm`
-  code size by about 400 bytes (up to a total ~950 bytes).
+  code size by about 450 bytes (up to a total of ~1.2K).
 
 - **extra_assertions**: Enable various extra, expensive integrity assertions and
   defensive mechanisms, such as poisoning freed memory. This incurs a large
@@ -113,24 +113,15 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 - The maximum alignment supported is word alignment.
 
-- Deallocation always pushes to the front of the free list, making it an *O(1)*
-  operation.
+- Deallocation is an *O(1)* operation.
 
-  The tradeoff is that physically adjacent cells `a` and `b` are never
-  re-unified into a single cell `ab` so that they could service a potential
-  allocation of size `n` where
+- `wee_alloc` will never return freed pages to the WebAssembly engine /
+  operating system. Currently, WebAssembly can only grow its heap, and can never
+  shrink it. All allocated pages are indefinitely kept in `wee_alloc`'s internal
+  free lists for potential future allocations, even when running on unix
+  targets.
 
-      size(max(size(a), size(b))) < n <= size(a) + size(b)
-
-  This leads to higher fragmentation and peak memory usage.
-
-  It also follows that `wee_alloc` will never return freed pages to the
-  WebAssembly engine / operating system. They are indefinitely kept in its
-  internal free lists for potential future allocations. Once a WebAssembly
-  module instance / process reaches peak page usage, its usage will remain at
-  that peak until finished.
-
-- `wee_alloc` uses a simple first-fit free list implementation. This means that
+- `wee_alloc` uses a simple, first-fit free list implementation. This means that
   allocation is an *O(n)* operation.
 
   Using the `size_classes` feature enables extra free lists dedicated to small
@@ -140,7 +131,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   uses the same first-fit routines that allocating from the main free list does,
   which avoids introducing more code bloat than necessary.
 
-Finally, here is a diagram giving an overview of how `wee_alloc` is implemented:
+Finally, here is a diagram giving an overview of `wee_alloc`'s implementation:
 
 ```text
 +------------------------------------------------------------------------------+
@@ -225,10 +216,14 @@ for hacking!
 // - graphviz visualization of free lists, statistics on fregmentation,
 //   etc. behind a feature
 
-#![no_std]
+#![deny(missing_docs)]
+
+#![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
 #![feature(alloc, allocator_api, core_intrinsics, global_allocator)]
 #![cfg_attr(target_arch = "wasm32", feature(link_llvm_intrinsics))]
 
+#[cfg(feature = "use_std_for_test_debugging")]
+extern crate core;
 extern crate alloc;
 
 #[cfg(all(unix, not(target_arch = "wasm32")))]
@@ -253,12 +248,13 @@ mod imp;
 #[cfg(feature = "size_classes")]
 mod size_classes;
 
-pub mod units;
+mod units;
 
 use alloc::heap::{Alloc, Layout, AllocErr};
 use const_init::ConstInit;
 use core::isize;
 use core::marker::Sync;
+use core::mem;
 use core::ptr;
 use units::{Bytes, Pages, RoundUpTo, size_of, Words};
 
@@ -278,59 +274,52 @@ extra_only! {
 }
 
 #[repr(C)]
-struct Cell {
-    size: Bytes,
-    next: *mut Cell,
+struct CellHeader {
+    next_cell_raw: ptr::NonNull<CellHeader>,
+    prev_cell: *mut CellHeader,
 }
 
-impl Cell {
-    #[inline]
-    unsafe fn write_initial(size: Bytes, uninitialized: *mut Cell) {
-        assert_is_word_aligned(uninitialized);
-        ptr::write(uninitialized, Cell {
-            size,
-            next: ptr::null_mut(),
-        });
-    }
+#[repr(C)]
+struct AllocatedCell {
+    header: CellHeader
+}
 
-    #[inline]
-    unsafe fn data(cell: *mut Cell) -> *mut u8 {
-        extra_assert!(!cell.is_null());
-        assert_local_cell_invariants(cell);
-        cell.offset(1) as *mut u8
-    }
+#[test]
+fn allocated_cell_layout() {
+    assert_eq!(
+        size_of::<CellHeader>(),
+        size_of::<AllocatedCell>(),
+        "Safety and correctness depends on AllocatedCell being the same as CellHeader"
+    );
 
-    #[inline]
-    unsafe fn set_next(link: &mut *mut Cell, next: *mut Cell) {
-        assert_local_cell_invariants(next);
-        *link = next;
-    }
+    assert_eq!(
+        mem::align_of::<CellHeader>(),
+        mem::align_of::<AllocatedCell>()
+    );
+}
 
-    #[inline]
-    unsafe fn insert_into_free_list(head: &mut *mut Cell, cell: *mut Cell, policy: &AllocPolicy) {
-        assert_local_cell_invariants(*head);
-        assert_local_cell_invariants(cell);
+#[repr(C)]
+struct FreeCell {
+    header: CellHeader,
+    next_free_raw: *mut FreeCell,
+}
 
-        write_free_pattern(cell, policy);
-        Cell::set_next(&mut (*cell).next, *head);
-        Cell::set_next(head, cell);
+#[test]
+fn free_cell_layout() {
+    assert_eq!(
+        size_of::<CellHeader>() + Bytes(1),
+        size_of::<FreeCell>(),
+        "Safety and correctness depends on FreeCell being only one word larger than CellHeader"
+    );
 
-        assert_is_valid_free_list(*head, policy);
-    }
+    assert_eq!(
+        mem::align_of::<CellHeader>(),
+        mem::align_of::<AllocatedCell>()
+    );
 }
 
 #[cfg(feature = "extra_assertions")]
-impl Cell {
-    // Written to `Cell::next` when the `Cell` is allocated from a size class,
-    // and removed from its free list. When the `Cell` is freed and returned to
-    // its free list, then the value is overwritten with the proper free list
-    // link.
-    #[cfg(feature = "size_classes")]
-    const SIZE_CLASS_ALLOCATED_NEXT: *mut Cell = 0x11111111 as *mut Cell;
-
-    // Same thing as above, but for no-size-class/large allocations.
-    const LARGE_ALLOCATED_NEXT: *mut Cell = 0x99999999 as *mut Cell;
-
+impl CellHeader {
     // Whenever a `Cell` is inserted into a size class's free list (either
     // because it was just freed or because it was freshly allocated from some
     // upstream source), we write this pattern over the `Cell`'s data.
@@ -345,65 +334,342 @@ impl Cell {
     // allocations free list.
     //
     // If you see unexpected `0x57575757` values, then either (a) you have a
-    // use-after-free, or (b) there is a bug in `wee_alloc` and its size classes
-    // implementation.
+    // use-after-free, or (b) there is a bug in `wee_alloc` and its main free
+    // list implementation.
     const LARGE_FREE_PATTERN: u8 = 0x57;
-
-    #[cfg(feature = "size_classes")]
-    fn is_allocated(cell: *mut Cell) -> bool {
-        cell == Cell::SIZE_CLASS_ALLOCATED_NEXT || cell == Cell::LARGE_ALLOCATED_NEXT
-    }
-
-    #[cfg(not(feature = "size_classes"))]
-    fn is_allocated(cell: *mut Cell) -> bool {
-        cell == Cell::LARGE_ALLOCATED_NEXT
-    }
 }
 
-extra_only! {
-    fn set_allocated(cell: *mut Cell, policy: &AllocPolicy) {
-        unsafe {
-            extra_assert!(!cell.is_null());
-            assert_is_word_aligned(cell);
-            (*cell).next = policy.allocated_sentinel();
+impl CellHeader {
+    // Low bits in `CellHeader::next_cell_raw`.
+    //
+    // If `CellHeader::IS_ALLOCATED` is set, then the cell is allocated, and
+    // should never be in the free list. If the bit is not set, then this cell
+    // is free, and must be in the free list (or is in the process of being
+    // added to the free list).
+    //
+    // The `CellHeader::next_cell_raw` pointer (after appropriate masking)
+    // always points to the byte just *after* this cell. If the
+    // `CellHeader::NEXT_CELL_IS_INVALID` bit is not set, then it points to the
+    // next cell. If that bit is set, then it points to the invalid memory that
+    // follows this cell.
+    const IS_ALLOCATED: usize         =  0b01;
+    const NEXT_CELL_IS_INVALID: usize =  0b10;
+    const MASK: usize                 = !0b11;
+
+    #[test]
+    fn can_use_low_bits() {
+        assert!(
+            mem::align_of::<*mut u8>() >= 0b100,
+            "we rely on being able to stick tags into the lowest two bits"
+        );
+    }
+
+    fn is_allocated(&self) -> bool {
+        self.next_cell_raw.as_ptr() as usize & Self::IS_ALLOCATED != 0
+    }
+
+    fn is_free(&self) -> bool {
+        !self.is_allocated()
+    }
+
+    fn set_allocated(&mut self) {
+        let next = self.next_cell_raw.as_ptr() as usize;
+        let next = next | Self::IS_ALLOCATED;
+        extra_assert!(next != 0);
+        self.next_cell_raw = unsafe {
+            ptr::NonNull::new_unchecked(next as *mut CellHeader)
+        };
+    }
+
+    fn set_free(&mut self) {
+        let next = self.next_cell_raw.as_ptr() as usize;
+        let next = next & !Self::IS_ALLOCATED;
+        extra_assert!(next != 0);
+        self.next_cell_raw = unsafe {
+            ptr::NonNull::new_unchecked(next as *mut CellHeader)
+        };
+    }
+
+    fn next_cell_is_invalid(&self) -> bool {
+        self.next_cell_raw.as_ptr() as usize & Self::NEXT_CELL_IS_INVALID != 0
+    }
+
+    fn next_cell_unchecked(&self) -> *mut CellHeader {
+        let ptr = self.next_cell_raw.as_ptr() as usize;
+        let ptr = ptr & Self::MASK;
+        let ptr = ptr as *mut CellHeader;
+        extra_assert!(!ptr.is_null());
+        assert_is_word_aligned(ptr);
+        ptr
+    }
+
+    fn next_cell(&self) -> Option<*mut CellHeader> {
+        if self.next_cell_is_invalid() {
+            None
+        } else {
+            Some(self.next_cell_unchecked())
+        }
+    }
+
+    fn prev_cell(&self) -> Option<*mut CellHeader> {
+        if self.prev_cell.is_null() {
+            None
+        } else {
+            Some(self.prev_cell)
+        }
+    }
+
+    fn size(&self) -> Bytes {
+        let data = unsafe {
+            (self as *const CellHeader as *mut CellHeader).offset(1)
+        };
+        assert_is_word_aligned(data);
+        let data = data as usize;
+
+        let next = self.next_cell_unchecked();
+        assert_is_word_aligned(next);
+        let next = next as usize;
+
+        extra_assert!(next > data);
+        Bytes(next - data)
+    }
+
+    #[cfg(feature = "extra_assertions")]
+    fn as_free_cell(&self) -> Option<&FreeCell> {
+        if self.is_free() {
+            Some(unsafe { mem::transmute(self) })
+        } else {
+            None
+        }
+    }
+
+    fn as_free_cell_mut(&mut self) -> Option<&mut FreeCell> {
+        if self.is_free() {
+            Some(unsafe { mem::transmute(self) })
+        } else {
+            None
         }
     }
 }
 
-extra_only! {
-    fn assert_is_allocated(cell: *mut Cell, policy: &AllocPolicy) {
+impl FreeCell {
+    // Low bits in `FreeCell::next_free_raw`.
+    //
+    // If `NEXT_FREE_CELL_CAN_MERGE` is set, then the following invariants hold
+    // true:
+    //
+    // * `FreeCell::next_free_raw` (and'd with the mask) is not null.
+    // * `FreeCell::next_free_raw` is the adjacent `CellHeader::prev_cell`.
+    //
+    // Therefore, this free cell can be merged into a single, larger, contiguous
+    // free cell with its previous neighbor, which is also the next cell in the
+    // free list.
+    const NEXT_FREE_CELL_CAN_MERGE: usize =  0b01;
+    const _RESERVED: usize                =  0b10;
+    const MASK: usize                     = !0b11;
+
+    fn next_free_can_merge(&self) -> bool {
+        self.next_free_raw as usize & Self::NEXT_FREE_CELL_CAN_MERGE != 0
+    }
+
+    fn set_next_free_can_merge(&mut self) {
+        let next_free = self.next_free_raw as usize;
+        let next_free = next_free | Self::NEXT_FREE_CELL_CAN_MERGE;
+        self.next_free_raw = next_free as *mut FreeCell;
+    }
+
+    fn next_free(&self) -> *mut FreeCell {
+        let next_free = self.next_free_raw as usize & Self::MASK;
+        next_free as *mut FreeCell
+    }
+
+    unsafe fn from_uninitialized<'a>(
+        raw: *mut u8,
+        next_cell: ptr::NonNull<CellHeader>,
+        prev_cell: Option<*mut CellHeader>,
+        next_free: Option<*mut FreeCell>,
+        policy: &AllocPolicy
+    ) -> *mut FreeCell {
+        extra_assert!(!raw.is_null());
+        assert_is_word_aligned(raw);
+        extra_assert!((raw as usize) < (next_cell.as_ptr() as usize));
+        extra_assert!((next_cell.as_ptr() as usize) - (raw as usize) >= size_of::<usize>().0);
+
+        let prev_cell = prev_cell.unwrap_or(ptr::null_mut());
+        let next_free = next_free.unwrap_or(ptr::null_mut());
+
+        let raw = raw as *mut FreeCell;
+        ptr::write(raw, FreeCell {
+            header: CellHeader {
+                next_cell_raw: next_cell,
+                prev_cell,
+            },
+            next_free_raw: next_free,
+        });
+        write_free_pattern(&mut *raw, policy);
+        raw
+    }
+
+    fn into_allocated_cell(&mut self, policy: &AllocPolicy) -> &mut AllocatedCell {
+        assert_local_cell_invariants(&mut self.header);
+        assert_is_poisoned_with_free_pattern(self, policy);
+
+        self.header.set_allocated();
         unsafe {
-            extra_assert!(!cell.is_null());
-            assert_is_word_aligned(cell);
+            mem::transmute(self)
+        }
+    }
+
+    fn should_split_for(&self, alloc_size: Words, policy: &AllocPolicy) -> bool {
+        let self_size = self.header.size();
+
+        let min_cell_size: Bytes = policy.min_cell_size(alloc_size).into();
+        extra_assert!(min_cell_size >= size_of::<usize>());
+
+        let alloc_size: Bytes = alloc_size.into();
+        extra_assert!(self_size >= alloc_size);
+
+        self_size - alloc_size >= min_cell_size + size_of::<CellHeader>()
+    }
+
+    fn split_alloc(
+        &mut self,
+        previous: &mut *mut FreeCell,
+        alloc_size: Words,
+        policy: &AllocPolicy
+    ) -> Option<&mut AllocatedCell> {
+        extra_assert_eq!(*previous, self as *mut FreeCell);
+        extra_assert!(self.header.size() >= alloc_size.into());
+        extra_assert!(alloc_size >= size_of::<usize>().round_up_to());
+
+        if self.should_split_for(alloc_size, policy) {
+            let orig_size = self.header.size();
+
+            let alloc_size: Bytes = alloc_size.into();
+            extra_assert!((alloc_size.0 as isize) < isize::MAX);
+
+            let remainder = unsafe {
+                let data = (&mut self.header as *mut CellHeader).offset(1) as *mut u8;
+                data.offset(alloc_size.0 as isize)
+            };
+            extra_assert!((remainder as usize) < (self.header.next_cell_unchecked() as usize));
+
+            let remainder_size = self.header.size() - alloc_size - size_of::<CellHeader>();
             extra_assert_eq!(
-                (*cell).next,
-                policy.allocated_sentinel(),
-                "cell {:p} should have next=allocated ({:p}) but found next={:p}",
-                cell,
-                policy.allocated_sentinel(),
-                (*cell).next
+                remainder_size.0,
+                (self.header.next_cell_unchecked() as usize)
+                    - (remainder as usize)
+                    - size_of::<CellHeader>().0
             );
+
+            let remainder = unsafe {
+                &mut *FreeCell::from_uninitialized(
+                    remainder,
+                    self.header.next_cell_raw,
+                    Some(&mut self.header),
+                    Some(self.next_free()),
+                    policy
+                )
+            };
+
+            if let Some(next) = self.header.next_cell() {
+                unsafe {
+                    (*next).prev_cell = &mut remainder.header;
+                }
+            }
+            self.header.next_cell_raw = unsafe {
+                ptr::NonNull::new_unchecked(&mut remainder.header)
+            };
+
+            extra_assert_eq!(
+                self.header.size() + remainder.header.size(),
+                orig_size - size_of::<CellHeader>()
+            );
+            assert_local_cell_invariants(&mut self.header);
+            assert_local_cell_invariants(&mut remainder.header);
+
+            *previous = remainder;
+            assert_is_valid_free_list(*previous, policy);
+
+            Some(self.into_allocated_cell(policy))
+        } else {
+            None
         }
+    }
+
+    fn insert_into_free_list<'a>(
+        &'a mut self,
+        head: &'a mut *mut FreeCell,
+        policy: &AllocPolicy
+    ) -> &'a mut *mut FreeCell {
+        extra_assert!(!self.next_free_can_merge());
+        extra_assert!(self.next_free().is_null());
+        self.next_free_raw = *head;
+        *head = self;
+        assert_is_valid_free_list(*head, policy);
+        head
+    }
+
+    #[cfg(feature = "extra_assertions")]
+    fn tail_data(&mut self) -> *mut u8 {
+        let data = unsafe {
+            (self as *mut FreeCell).offset(1) as *mut u8
+        };
+        assert_is_word_aligned(data);
+        data
+    }
+
+    #[cfg(feature = "extra_assertions")]
+    fn tail_data_size(&self) -> Bytes {
+        let size = self.header.size();
+        extra_assert!(size >= size_of::<usize>());
+        // Subtract a word from the size, since `FreeCell::next_free` uses it.
+        size - size_of::<usize>()
     }
 }
 
-extra_only! {
-    fn write_free_pattern(cell: *mut Cell, policy: &AllocPolicy) {
+impl AllocatedCell {
+    unsafe fn into_free_cell(
+        &mut self,
+        policy: &AllocPolicy
+    ) -> &mut FreeCell {
+        assert_local_cell_invariants(&mut self.header);
+
+        self.header.set_free();
+        let free: &mut FreeCell = mem::transmute(self);
+        write_free_pattern(free, policy);
+        free.next_free_raw = ptr::null_mut();
+        free
+    }
+
+    fn data(&self) -> *mut u8 {
+        let cell = &self.header as *const CellHeader as *mut CellHeader;
+        extra_assert!(!cell.is_null());
+        assert_local_cell_invariants(cell);
         unsafe {
-            extra_assert!(!cell.is_null());
-            assert_is_word_aligned(cell);
-            ptr::write_bytes(Cell::data(cell), policy.free_pattern(), (*cell).size.0);
+            cell.offset(1) as *mut u8
         }
     }
 }
 
 extra_only! {
-    fn assert_is_poisoned_with_free_pattern(cell: *mut Cell, policy: &AllocPolicy) {
+    fn write_free_pattern(cell: &mut FreeCell, policy: &AllocPolicy) {
+        unsafe {
+            let data = cell.tail_data();
+            let size: Bytes = cell.tail_data_size();
+            let pattern = policy.free_pattern();
+            ptr::write_bytes(data, pattern, size.0);
+        }
+    }
+}
+
+extra_only! {
+    fn assert_is_poisoned_with_free_pattern(cell: &mut FreeCell, policy: &AllocPolicy) {
         use core::slice;
         unsafe {
-            extra_assert!(!cell.is_null());
-            assert_is_word_aligned(cell);
-            let data = slice::from_raw_parts(Cell::data(cell) as *const u8, (*cell).size.0);
+            let size: Bytes = cell.tail_data_size();
+            let data = cell.tail_data();
+            let data = slice::from_raw_parts(data, size.0);
             let pattern = policy.free_pattern();
             extra_assert!(data.iter().all(|byte| *byte == pattern));
         }
@@ -411,21 +677,45 @@ extra_only! {
 }
 
 extra_only! {
-    fn assert_next_is_not_in_data(cell: *mut Cell) {
-        unsafe {
-            if cell.is_null() {
-                return;
-            }
-            let next = (*cell).next as usize;
-            assert!(next < (cell as usize) || next >= (cell as usize + (*cell).size.0));
-        }
-    }
-}
-
-extra_only! {
-    fn assert_local_cell_invariants(cell: *mut Cell) {
+    fn assert_local_cell_invariants(cell: *mut CellHeader) {
         assert_is_word_aligned(cell);
-        assert_next_is_not_in_data(cell);
+        unsafe {
+            if let Some(cell_ref) = cell.as_ref() {
+                assert!(cell_ref.size() >= size_of::<usize>());
+
+                if let Some(prev) = cell_ref.prev_cell.as_ref() {
+                    assert!(prev.size() >= size_of::<usize>());
+                    assert!(!prev.next_cell_is_invalid());
+                    assert_eq!(prev.next_cell_unchecked(), cell, "next(prev(cell)) == cell");
+                }
+
+                if let Some(next) = cell_ref.next_cell() {
+                    assert!(!next.is_null());
+                    let next = &*next;
+                    assert!(next.size() >= size_of::<usize>());
+                    assert_eq!(next.prev_cell, cell, "prev(next(cell)) == cell");
+                }
+
+                if let Some(free) = cell_ref.as_free_cell() {
+                    if free.next_free_can_merge() {
+                        let prev_cell = free.header.prev_cell().expect(
+                            "if the next free cell (aka prev_cell) can merge, \
+                             prev_cell had better exist"
+                        );
+                        assert!(!prev_cell.is_null());
+                        assert!(
+                            (*prev_cell).is_free(),
+                            "prev_cell is free, when NEXT_FREE_CELL_CAN_MERGE bit is set"
+                        );
+                        assert_eq!(
+                            free.next_free() as *mut CellHeader,
+                            prev_cell,
+                            "next_free == prev_cell, when NEXT_FREE_CAN_MERGE bit is set"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -441,56 +731,55 @@ extra_only! {
     //
     // This is O(size of free list) and can be pretty slow, so try to restrict
     // its usage to verifying that a free list is still valid after mutation.
-    fn assert_is_valid_free_list(head: *mut Cell, policy: &AllocPolicy) {
+    fn assert_is_valid_free_list(head: *mut FreeCell, policy: &AllocPolicy) {
         unsafe {
             let mut left = head;
-            assert_local_cell_invariants(left);
+            assert_local_cell_invariants(left as *mut CellHeader);
             if left.is_null() {
                 return;
             }
-            assert_is_poisoned_with_free_pattern(left, policy);
+            assert_is_poisoned_with_free_pattern(&mut *left, policy);
 
-            let mut right = (*left).next;
+            let mut right = (*left).next_free();
 
             loop {
-                assert_local_cell_invariants(right);
+                assert_local_cell_invariants(right as *mut CellHeader);
                 if right.is_null() {
                     return;
                 }
-                assert_is_poisoned_with_free_pattern(right, policy);
+                assert_is_poisoned_with_free_pattern(&mut *right, policy);
 
                 assert!(left != right, "free list should not have cycles");
-                assert!(!Cell::is_allocated(left), "cells in free list should never be allocated");
-                assert!(!Cell::is_allocated(right), "cells in free list should never be allocated");
+                assert!((*right).header.is_free(), "cells in free list should never be allocated");
+                assert!((*left).header.is_free(), "cells in free list should never be allocated");
 
-                right = (*right).next;
-                assert_local_cell_invariants(right);
+                right = (*right).next_free();
+                assert_local_cell_invariants(right as *mut CellHeader);
                 if right.is_null() {
                     return;
                 }
-                assert_is_poisoned_with_free_pattern(right, policy);
+                assert_is_poisoned_with_free_pattern(&mut *right, policy);
 
-                left = (*left).next;
-                assert_local_cell_invariants(left);
-                assert_is_poisoned_with_free_pattern(left, policy);
+                left = (*left).next_free();
+                assert_local_cell_invariants(left as *mut CellHeader);
+                assert_is_poisoned_with_free_pattern(&mut *left, policy);
 
                 assert!(left != right, "free list should not have cycles");
-                assert!(!Cell::is_allocated(left), "cells in free list should never be allocated");
-                assert!(!Cell::is_allocated(right), "cells in free list should never be allocated");
+                assert!((*right).header.is_free(), "cells in free list should never be allocated");
+                assert!((*left).header.is_free(), "cells in free list should never be allocated");
 
-                right = (*right).next;
+                right = (*right).next_free();
             }
         }
     }
 }
 
 trait AllocPolicy {
-    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut Cell, ()>;
+    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut FreeCell, ()>;
 
     fn min_cell_size(&self, alloc_size: Words) -> Words;
 
-    #[cfg(feature = "extra_assertions")]
-    fn allocated_sentinel(&self) -> *mut Cell;
+    fn should_merge_adjacent_free_cells(&self) -> bool;
 
     #[cfg(feature = "extra_assertions")]
     fn free_pattern(&self) -> u8;
@@ -508,112 +797,127 @@ impl LargeAllocPolicy {
 }
 
 impl AllocPolicy for LargeAllocPolicy {
-    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut Cell, ()> {
+    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut FreeCell, ()> {
         let size: Bytes = size.into();
-        let pages: Pages = (size + size_of::<Cell>()).round_up_to();
-        let new_pages = imp::alloc_pages(pages) as *mut Cell;
-        let actual_size: Bytes = pages.into();
-        Cell::write_initial(actual_size - size_of::<Cell>(), new_pages);
-        Ok(new_pages)
+        let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
+        let new_pages = imp::alloc_pages(pages);
+        let allocated_size: Bytes = pages.into();
+        let next_cell = new_pages.offset(allocated_size.0 as isize);
+        let next_cell = next_cell as usize | CellHeader::NEXT_CELL_IS_INVALID;
+        extra_assert!(next_cell != 0);
+        let next_cell = ptr::NonNull::new_unchecked(next_cell as *mut CellHeader);
+        Ok(FreeCell::from_uninitialized(new_pages, next_cell, None, None, self as &AllocPolicy))
     }
 
     fn min_cell_size(&self, _alloc_size: Words) -> Words {
         Self::MIN_CELL_SIZE
     }
 
-    #[cfg(feature = "extra_assertions")]
-    fn allocated_sentinel(&self) -> *mut Cell {
-        Cell::LARGE_ALLOCATED_NEXT
+    fn should_merge_adjacent_free_cells(&self) -> bool {
+        true
     }
 
     #[cfg(feature = "extra_assertions")]
     fn free_pattern(&self) -> u8 {
-        Cell::LARGE_FREE_PATTERN
+        CellHeader::LARGE_FREE_PATTERN
     }
 }
 
-unsafe fn walk_free_list<F, T>(head: &mut *mut Cell, mut f: F) -> Result<T, ()>
+unsafe fn walk_free_list<F, T>(
+    head: &mut *mut FreeCell,
+    policy: &AllocPolicy,
+    mut f: F
+) -> Result<T, ()>
 where
-    F: FnMut(&mut *mut Cell, *mut Cell) -> Option<T>
+    F: FnMut(&mut *mut FreeCell, &mut FreeCell) -> Option<T>
 {
-    let mut previous = head;
+    // The previous cell in the free list (not to be confused with the current
+    // cell's previously _adjacent_ cell).
+    let mut previous_free = head;
 
     loop {
-        let current = *previous;
-        assert_local_cell_invariants(current);
+        let current_free = *previous_free;
+        assert_local_cell_invariants(current_free as *mut CellHeader);
 
-        if current.is_null() {
+        if current_free.is_null() {
             return Err(());
         }
 
-        if let Some(result) = f(previous, current) {
-            return Ok(result);
-        } else {
-            previous = &mut (*current).next;
+        let mut current_free = &mut *current_free;
+
+        if policy.should_merge_adjacent_free_cells() {
+            // Now check if this cell can merge with the next cell in the free
+            // list. We do this after the initial allocation attempt so that we
+            // don't merge, only to immediately split the cell again right
+            // afterwards.
+            while current_free.next_free_can_merge() {
+                let prev_adjacent = current_free.header.prev_cell as *mut FreeCell;
+                extra_assert_eq!(prev_adjacent, current_free.next_free());
+                let prev_adjacent = &mut *prev_adjacent;
+
+                (*prev_adjacent).header.next_cell_raw = current_free.header.next_cell_raw;
+                if let Some(next) = current_free.header.next_cell() {
+                    (*next).prev_cell = &mut prev_adjacent.header;
+                }
+
+                *previous_free = prev_adjacent;
+                current_free = prev_adjacent;
+
+                write_free_pattern(current_free, policy);
+                assert_local_cell_invariants(&mut current_free.header);
+            }
         }
+
+        if let Some(result) = f(previous_free, current_free) {
+            return Ok(result);
+        }
+
+        previous_free = &mut current_free.next_free_raw;
     }
 }
 
-#[inline]
-fn should_split(cell_size: Bytes, alloc_size: Words, policy: &AllocPolicy) -> bool {
-    let min_cell_size: Bytes = policy.min_cell_size(alloc_size).into();
-    extra_assert!(min_cell_size.0 > 0);
-
-    let alloc_size: Bytes = alloc_size.into();
-    extra_assert!(cell_size >= alloc_size);
-
-    cell_size - alloc_size >= min_cell_size + size_of::<Cell>()
-}
-
-unsafe fn alloc_first_fit(size: Words, head: &mut *mut Cell, policy: &AllocPolicy) -> Result<*mut u8, ()> {
+/// Do a first-fit allocation from the given free list.
+unsafe fn alloc_first_fit(
+    size: Words,
+    head: &mut *mut FreeCell,
+    policy: &AllocPolicy
+) -> Result<*mut u8, ()> {
     extra_assert!(size.0 > 0);
 
-    let size_in_bytes: Bytes = size.into();
+    walk_free_list(head, policy, |previous, current| {
+        extra_assert_eq!(*previous, current as *mut _);
 
-    walk_free_list(head, |previous, current| {
-        extra_assert_eq!(*previous, current);
-
-        if (*current).size < size_in_bytes {
+        // Check whether this cell is large enough to satisfy this allocation.
+        if current.header.size() < size.into() {
             return None;
         }
 
-        let result = Cell::data(current);
-
-        if should_split((*current).size, size, policy) {
-            extra_assert!(size.0 <= isize::MAX as usize);
-
-            let remainder = result.offset(size_in_bytes.0 as isize) as *mut Cell;
-            Cell::write_initial((*current).size - size_in_bytes - size_of::<Cell>(), remainder);
-            (*current).size = size_in_bytes;
-
-            Cell::set_next(&mut (*remainder).next, (*current).next);
-            *previous = remainder;
-            assert_is_valid_free_list(*previous, policy);
-        } else {
-            *previous = (*current).next;
-            assert_is_valid_free_list(*previous, policy);
+        // The cell is large enough for this allocation -- maybe *too*
+        // large. Try splitting it.
+        if let Some(allocated) = current.split_alloc(previous, size, policy) {
+            return Some(allocated.data());
         }
 
-        set_allocated(current, policy);
-        Some(result)
+        // This cell has crazy Goldilocks levels of "just right". Use it as-is
+        // without any splitting.
+        *previous = current.next_free();
+        assert_is_valid_free_list(*previous, policy);
+        let allocated = current.into_allocated_cell(policy);
+        Some(allocated.data())
     })
 }
 
 unsafe fn alloc_with_refill(
     size: Words,
-    head: &mut *mut Cell,
+    head: &mut *mut FreeCell,
     policy: &AllocPolicy
 ) -> Result<*mut u8, ()> {
-    if head.is_null() {
-        Cell::insert_into_free_list(head, policy.new_cell_for_free_list(size)?, policy);
-        return alloc_first_fit(size, head, policy);
-    }
-
     if let Ok(result) = alloc_first_fit(size, head, policy) {
         return Ok(result);
     }
 
-    Cell::insert_into_free_list(head, policy.new_cell_for_free_list(size)?, policy);
+    let cell = policy.new_cell_for_free_list(size)?;
+    let head = (*cell).insert_into_free_list(head, policy);
     alloc_first_fit(size, head, policy)
 }
 
@@ -624,7 +928,7 @@ unsafe fn alloc_with_refill(
 /// When used in unix environments, cannot move in memory. Typically not an
 /// issue if you're just using this as a `static` global allocator.
 pub struct WeeAlloc {
-    head: imp::Exclusive<*mut Cell>,
+    head: imp::Exclusive<*mut FreeCell>,
 
     #[cfg(feature = "size_classes")]
     size_classes: size_classes::SizeClasses,
@@ -642,18 +946,20 @@ impl ConstInit for WeeAlloc {
 }
 
 impl WeeAlloc {
-    /// TODO FITZGEN
+    /// An initial `const` default construction of a `WeeAlloc` allocator.
+    ///
+    /// This is usable for initializing `static`s that get set as the global
+    /// allocator.
     pub const INIT: Self = <Self as ConstInit>::INIT;
 
     #[cfg(feature = "size_classes")]
-    #[inline]
     unsafe fn with_free_list_and_policy_for_size<F, T>(
         &self,
         size: Words,
         f: F
     ) -> T
     where
-        F: for<'a> FnOnce(&'a mut *mut Cell, &'a AllocPolicy) -> T
+        F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T
     {
         extra_assert!(size.0 > 0);
         if let Some(head) = self.size_classes.get(size) {
@@ -671,14 +977,13 @@ impl WeeAlloc {
     }
 
     #[cfg(not(feature = "size_classes"))]
-    #[inline]
     unsafe fn with_free_list_and_policy_for_size<F, T>(
         &self,
         size: Words,
         f: F
     ) -> T
     where
-        F: for<'a> FnOnce(&'a mut *mut Cell, &'a AllocPolicy) -> T
+        F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T
     {
         extra_assert!(size.0 > 0);
         let policy = &LARGE_ALLOC_POLICY as &AllocPolicy;
@@ -704,7 +1009,8 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
 
         let size: Words = size.round_up_to();
         self.with_free_list_and_policy_for_size(size, |head, policy| {
-            alloc_with_refill(size, head, policy).map_err(move |()| AllocErr::Exhausted {
+            assert_is_valid_free_list(*head, policy);
+            alloc_with_refill(size, head, policy).map_err(|()| AllocErr::Exhausted {
                 request: layout
             })
         })
@@ -719,11 +1025,73 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
 
         let size: Words = size.round_up_to();
         self.with_free_list_and_policy_for_size(size, |head, policy| {
-            let cell = (ptr as *mut Cell).offset(-1);
-            extra_assert!((*cell).size >= size.into());
-            assert_is_allocated(cell, policy);
+            let cell = (ptr as *mut CellHeader).offset(-1);
+            let cell = &mut *cell;
 
-            Cell::insert_into_free_list(head, cell, policy);
+            extra_assert!(cell.size() >= size.into());
+            extra_assert!(cell.is_allocated());
+            let cell: &mut AllocatedCell = mem::transmute(cell);
+
+            let free = cell.into_free_cell(policy);
+
+            if policy.should_merge_adjacent_free_cells() {
+                // Merging with the _previous_ adjacent cell is easy: it is
+                // already in the free list, so folding this cell into it is all
+                // that needs to be done. The free list can be left alone.
+                //
+                // Merging with the _next_ adjacent cell is a little harder. It
+                // is already in the free list, but we need to splice it out
+                // from the free list, since its header will become invalid
+                // after consolidation, and it is *this* cell's header that
+                // needs to be in the free list. But we don't have access to the
+                // pointer pointing to the soon-to-be-invalid header, and
+                // therefore can't adjust that pointer. So we have a delayed
+                // consolidation scheme. We insert this cell just after the next
+                // adjacent cell in the free list, and set the next adjacent
+                // cell's `NEXT_FREE_CAN_MERGE` bit. The next time that we walk
+                // the free list for allocation, the bit will be checked and the
+                // consolidation will happen at that time.
+                //
+                // If _both_ the previous and next adjacent cells are free, we
+                // are faced with a dilemma. We cannot merge all previous,
+                // current, and next cells together because our singly-linked
+                // free list doesn't allow for that kind of arbitrary appending
+                // and splicing. There are a few different kinds of tricks we
+                // could pull here, but they would increase implementation
+                // complexity and code size. Instead, we use a heuristic to
+                // choose whether to merge with the previous or next adjacent
+                // cell. We could choose to merge with whichever neighbor cell
+                // is smaller or larger, but we don't. We prefer the previous
+                // adjacent cell because we can greedily consolidate with it
+                // immediately, whereas the consolidating with the next adjacent
+                // cell must be delayed, as explained above.
+
+                if let Some(prev) = free.header.prev_cell().and_then(|p| (*p).as_free_cell_mut()) {
+                    prev.header.next_cell_raw = free.header.next_cell_raw;
+                    if let Some(next) = free.header.next_cell() {
+                        (*next).prev_cell = &mut prev.header;
+                    }
+
+                    write_free_pattern(prev, policy);
+                    assert_is_valid_free_list(*head, policy);
+                    return;
+                }
+
+                if let Some(next) = free.header.next_cell().and_then(|n| (*n).as_free_cell_mut()) {
+                    free.next_free_raw = next.next_free();
+                    next.next_free_raw = free;
+                    next.set_next_free_can_merge();
+
+                    assert_is_valid_free_list(*head, policy);
+                    return;
+                }
+            }
+
+            // Either we don't want to merge cells for the current policy, or we
+            // didn't have the opportunity to do any merging with our adjacent
+            // neighbors. In either case, push this cell onto the front of the
+            // free list.
+            let _head = free.insert_into_free_list(head, policy);
         });
     }
 }

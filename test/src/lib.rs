@@ -307,6 +307,15 @@ fn regression_test_2() {
 }
 
 #[test]
+fn regression_test_3() {
+    Operations::run_single_threaded(Operations(vec![
+        Alloc(13672),
+        Free(0),
+        Alloc(1)
+    ]));
+}
+
+#[test]
 fn allocate_size_zero() {
     use std::iter;
     Operations::run_single_threaded(Operations(

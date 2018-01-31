@@ -16,7 +16,8 @@ extern crate wee_alloc;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 // Need to provide a tiny `panic_fmt` lang-item implementation for
-// `#![no_std]`. This will just `trap` if we panic in the resulting WebAssembly.
+// `#![no_std]`. This translates into an `unreachable` instruction that will
+// raise a `trap` the WebAssembly execution if we panic at runtime.
 #[lang = "panic_fmt"]
 extern "C" fn panic_fmt(_args: ::core::fmt::Arguments, _file: &'static str, _line: u32) -> ! {
     unsafe {

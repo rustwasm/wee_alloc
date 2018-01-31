@@ -10,6 +10,7 @@ quickcheck = "0.6.0"
 [dependencies.wee_alloc]
 path = "../wee_alloc"
 default-features = false
+features = ["use_std_for_test_debugging"]
 
 [features]
 size_classes = ["wee_alloc/size_classes"]

@@ -64,7 +64,7 @@ impl<T> Exclusive<T> {
         let result = f(&mut *self.inner.get());
 
         let code = libc::pthread_mutex_unlock(&mut *self.lock.get());
-        extra_assert_eq!(code, 0, "pthread_mutex_lock should run OK");
+        extra_assert_eq!(code, 0, "pthread_mutex_unlock should run OK");
 
         result
     }
