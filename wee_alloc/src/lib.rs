@@ -26,6 +26,8 @@ Although WebAssembly is the primary target, `wee_alloc` also has an `mmap` based
 implementation for unix systems. This enables testing `wee_alloc`, and code
 using `wee_alloc`, without a browser or WebAssembly engine.
 
+**⚠ Custom allocators currently require Nightly Rust. ⚠**
+
 - [Using `wee_alloc` as the Global Allocator](#using-wee_alloc-as-the-global-allocator)
   - [With `#![no_std]`](#with-no_std)
   - [With `std`](#with-std)
@@ -217,14 +219,13 @@ for hacking!
 //   etc. behind a feature
 
 #![deny(missing_docs)]
-
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
 #![feature(alloc, allocator_api, core_intrinsics, global_allocator)]
 #![cfg_attr(target_arch = "wasm32", feature(link_llvm_intrinsics))]
 
+extern crate alloc;
 #[cfg(feature = "use_std_for_test_debugging")]
 extern crate core;
-extern crate alloc;
 
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 extern crate libc;
@@ -239,24 +240,28 @@ compile_error! {
     "There is no `wee_alloc` implementation for this target; want to send a pull request? :)"
 }
 
-#[cfg_attr(target_arch = "wasm32",
-           path = "./imp_wasm32.rs")]
-#[cfg_attr(all(unix, not(target_arch = "wasm32")),
-           path = "./imp_unix.rs")]
-mod imp;
+#[cfg(target_arch = "wasm32")]
+mod imp_wasm32;
+#[cfg(target_arch = "wasm32")]
+use imp_wasm32 as imp;
+
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+mod imp_unix;
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+use imp_unix as imp;
 
 #[cfg(feature = "size_classes")]
 mod size_classes;
 
 mod units;
 
-use alloc::heap::{Alloc, Layout, AllocErr};
+use alloc::heap::{Alloc, AllocErr, Layout};
 use const_init::ConstInit;
 use core::isize;
 use core::marker::Sync;
 use core::mem;
 use core::ptr;
-use units::{Bytes, Pages, RoundUpTo, size_of, Words};
+use units::{size_of, Bytes, Pages, RoundUpTo, Words};
 
 /// The WebAssembly page size, in bytes.
 pub const PAGE_SIZE: Bytes = Bytes(65536);
@@ -281,7 +286,7 @@ struct CellHeader {
 
 #[repr(C)]
 struct AllocatedCell {
-    header: CellHeader
+    header: CellHeader,
 }
 
 #[test]
@@ -352,9 +357,9 @@ impl CellHeader {
     // `CellHeader::NEXT_CELL_IS_INVALID` bit is not set, then it points to the
     // next cell. If that bit is set, then it points to the invalid memory that
     // follows this cell.
-    const IS_ALLOCATED: usize         =  0b01;
-    const NEXT_CELL_IS_INVALID: usize =  0b10;
-    const MASK: usize                 = !0b11;
+    const IS_ALLOCATED: usize = 0b01;
+    const NEXT_CELL_IS_INVALID: usize = 0b10;
+    const MASK: usize = !0b11;
 
     #[test]
     fn can_use_low_bits() {
@@ -376,18 +381,14 @@ impl CellHeader {
         let next = self.next_cell_raw.as_ptr() as usize;
         let next = next | Self::IS_ALLOCATED;
         extra_assert!(next != 0);
-        self.next_cell_raw = unsafe {
-            ptr::NonNull::new_unchecked(next as *mut CellHeader)
-        };
+        self.next_cell_raw = unsafe { ptr::NonNull::new_unchecked(next as *mut CellHeader) };
     }
 
     fn set_free(&mut self) {
         let next = self.next_cell_raw.as_ptr() as usize;
         let next = next & !Self::IS_ALLOCATED;
         extra_assert!(next != 0);
-        self.next_cell_raw = unsafe {
-            ptr::NonNull::new_unchecked(next as *mut CellHeader)
-        };
+        self.next_cell_raw = unsafe { ptr::NonNull::new_unchecked(next as *mut CellHeader) };
     }
 
     fn next_cell_is_invalid(&self) -> bool {
@@ -420,9 +421,7 @@ impl CellHeader {
     }
 
     fn size(&self) -> Bytes {
-        let data = unsafe {
-            (self as *const CellHeader as *mut CellHeader).offset(1)
-        };
+        let data = unsafe { (self as *const CellHeader as *mut CellHeader).offset(1) };
         assert_is_word_aligned(data);
         let data = data as usize;
 
@@ -464,9 +463,9 @@ impl FreeCell {
     // Therefore, this free cell can be merged into a single, larger, contiguous
     // free cell with its previous neighbor, which is also the next cell in the
     // free list.
-    const NEXT_FREE_CELL_CAN_MERGE: usize =  0b01;
-    const _RESERVED: usize                =  0b10;
-    const MASK: usize                     = !0b11;
+    const NEXT_FREE_CELL_CAN_MERGE: usize = 0b01;
+    const _RESERVED: usize = 0b10;
+    const MASK: usize = !0b11;
 
     fn next_free_can_merge(&self) -> bool {
         self.next_free_raw as usize & Self::NEXT_FREE_CELL_CAN_MERGE != 0
@@ -488,7 +487,7 @@ impl FreeCell {
         next_cell: ptr::NonNull<CellHeader>,
         prev_cell: Option<*mut CellHeader>,
         next_free: Option<*mut FreeCell>,
-        policy: &AllocPolicy
+        policy: &AllocPolicy,
     ) -> *mut FreeCell {
         extra_assert!(!raw.is_null());
         assert_is_word_aligned(raw);
@@ -499,13 +498,16 @@ impl FreeCell {
         let next_free = next_free.unwrap_or(ptr::null_mut());
 
         let raw = raw as *mut FreeCell;
-        ptr::write(raw, FreeCell {
-            header: CellHeader {
-                next_cell_raw: next_cell,
-                prev_cell,
+        ptr::write(
+            raw,
+            FreeCell {
+                header: CellHeader {
+                    next_cell_raw: next_cell,
+                    prev_cell,
+                },
+                next_free_raw: next_free,
             },
-            next_free_raw: next_free,
-        });
+        );
         write_free_pattern(&mut *raw, policy);
         raw
     }
@@ -515,9 +517,7 @@ impl FreeCell {
         assert_is_poisoned_with_free_pattern(self, policy);
 
         self.header.set_allocated();
-        unsafe {
-            mem::transmute(self)
-        }
+        unsafe { mem::transmute(self) }
     }
 
     fn should_split_for(&self, alloc_size: Words, policy: &AllocPolicy) -> bool {
@@ -536,7 +536,7 @@ impl FreeCell {
         &mut self,
         previous: &mut *mut FreeCell,
         alloc_size: Words,
-        policy: &AllocPolicy
+        policy: &AllocPolicy,
     ) -> Option<&mut AllocatedCell> {
         extra_assert_eq!(*previous, self as *mut FreeCell);
         extra_assert!(self.header.size() >= alloc_size.into());
@@ -557,8 +557,7 @@ impl FreeCell {
             let remainder_size = self.header.size() - alloc_size - size_of::<CellHeader>();
             extra_assert_eq!(
                 remainder_size.0,
-                (self.header.next_cell_unchecked() as usize)
-                    - (remainder as usize)
+                (self.header.next_cell_unchecked() as usize) - (remainder as usize)
                     - size_of::<CellHeader>().0
             );
 
@@ -568,7 +567,7 @@ impl FreeCell {
                     self.header.next_cell_raw,
                     Some(&mut self.header),
                     Some(self.next_free()),
-                    policy
+                    policy,
                 )
             };
 
@@ -577,9 +576,8 @@ impl FreeCell {
                     (*next).prev_cell = &mut remainder.header;
                 }
             }
-            self.header.next_cell_raw = unsafe {
-                ptr::NonNull::new_unchecked(&mut remainder.header)
-            };
+            self.header.next_cell_raw =
+                unsafe { ptr::NonNull::new_unchecked(&mut remainder.header) };
 
             extra_assert_eq!(
                 self.header.size() + remainder.header.size(),
@@ -600,7 +598,7 @@ impl FreeCell {
     fn insert_into_free_list<'a>(
         &'a mut self,
         head: &'a mut *mut FreeCell,
-        policy: &AllocPolicy
+        policy: &AllocPolicy,
     ) -> &'a mut *mut FreeCell {
         extra_assert!(!self.next_free_can_merge());
         extra_assert!(self.next_free().is_null());
@@ -612,9 +610,7 @@ impl FreeCell {
 
     #[cfg(feature = "extra_assertions")]
     fn tail_data(&mut self) -> *mut u8 {
-        let data = unsafe {
-            (self as *mut FreeCell).offset(1) as *mut u8
-        };
+        let data = unsafe { (self as *mut FreeCell).offset(1) as *mut u8 };
         assert_is_word_aligned(data);
         data
     }
@@ -629,10 +625,7 @@ impl FreeCell {
 }
 
 impl AllocatedCell {
-    unsafe fn into_free_cell(
-        &mut self,
-        policy: &AllocPolicy
-    ) -> &mut FreeCell {
+    unsafe fn into_free_cell(&mut self, policy: &AllocPolicy) -> &mut FreeCell {
         assert_local_cell_invariants(&mut self.header);
 
         self.header.set_free();
@@ -646,9 +639,7 @@ impl AllocatedCell {
         let cell = &self.header as *const CellHeader as *mut CellHeader;
         extra_assert!(!cell.is_null());
         assert_local_cell_invariants(cell);
-        unsafe {
-            cell.offset(1) as *mut u8
-        }
+        unsafe { cell.offset(1) as *mut u8 }
     }
 }
 
@@ -806,7 +797,13 @@ impl AllocPolicy for LargeAllocPolicy {
         let next_cell = next_cell as usize | CellHeader::NEXT_CELL_IS_INVALID;
         extra_assert!(next_cell != 0);
         let next_cell = ptr::NonNull::new_unchecked(next_cell as *mut CellHeader);
-        Ok(FreeCell::from_uninitialized(new_pages, next_cell, None, None, self as &AllocPolicy))
+        Ok(FreeCell::from_uninitialized(
+            new_pages,
+            next_cell,
+            None,
+            None,
+            self as &AllocPolicy,
+        ))
     }
 
     fn min_cell_size(&self, _alloc_size: Words) -> Words {
@@ -826,10 +823,10 @@ impl AllocPolicy for LargeAllocPolicy {
 unsafe fn walk_free_list<F, T>(
     head: &mut *mut FreeCell,
     policy: &AllocPolicy,
-    mut f: F
+    mut f: F,
 ) -> Result<T, ()>
 where
-    F: FnMut(&mut *mut FreeCell, &mut FreeCell) -> Option<T>
+    F: FnMut(&mut *mut FreeCell, &mut FreeCell) -> Option<T>,
 {
     // The previous cell in the free list (not to be confused with the current
     // cell's previously _adjacent_ cell).
@@ -880,7 +877,7 @@ where
 unsafe fn alloc_first_fit(
     size: Words,
     head: &mut *mut FreeCell,
-    policy: &AllocPolicy
+    policy: &AllocPolicy,
 ) -> Result<*mut u8, ()> {
     extra_assert!(size.0 > 0);
 
@@ -910,7 +907,7 @@ unsafe fn alloc_first_fit(
 unsafe fn alloc_with_refill(
     size: Words,
     head: &mut *mut FreeCell,
-    policy: &AllocPolicy
+    policy: &AllocPolicy,
 ) -> Result<*mut u8, ()> {
     if let Ok(result) = alloc_first_fit(size, head, policy) {
         return Ok(result);
@@ -953,52 +950,37 @@ impl WeeAlloc {
     pub const INIT: Self = <Self as ConstInit>::INIT;
 
     #[cfg(feature = "size_classes")]
-    unsafe fn with_free_list_and_policy_for_size<F, T>(
-        &self,
-        size: Words,
-        f: F
-    ) -> T
+    unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, f: F) -> T
     where
-        F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T
+        F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T,
     {
         extra_assert!(size.0 > 0);
         if let Some(head) = self.size_classes.get(size) {
             let policy = size_classes::SizeClassAllocPolicy(&self.head);
             let policy = &policy as &AllocPolicy;
-            head.with_exclusive_access(|head| {
-                f(head, policy)
-            })
+            head.with_exclusive_access(|head| f(head, policy))
         } else {
             let policy = &LARGE_ALLOC_POLICY as &AllocPolicy;
-            self.head.with_exclusive_access(|head| {
-                f(head, policy)
-            })
+            self.head.with_exclusive_access(|head| f(head, policy))
         }
     }
 
     #[cfg(not(feature = "size_classes"))]
-    unsafe fn with_free_list_and_policy_for_size<F, T>(
-        &self,
-        size: Words,
-        f: F
-    ) -> T
+    unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, f: F) -> T
     where
-        F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T
+        F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T,
     {
         extra_assert!(size.0 > 0);
         let policy = &LARGE_ALLOC_POLICY as &AllocPolicy;
-        self.head.with_exclusive_access(|head| {
-            f(head, policy)
-        })
+        self.head.with_exclusive_access(|head| f(head, policy))
     }
-
 }
 
 unsafe impl<'a> Alloc for &'a WeeAlloc {
     unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
         if layout.align() > ::core::mem::size_of::<usize>() {
             return Err(AllocErr::Unsupported {
-                details: "wee_alloc cannot align to more than word alignment"
+                details: "wee_alloc cannot align to more than word alignment",
             });
         }
 
@@ -1010,9 +992,8 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
         let size: Words = size.round_up_to();
         self.with_free_list_and_policy_for_size(size, |head, policy| {
             assert_is_valid_free_list(*head, policy);
-            alloc_with_refill(size, head, policy).map_err(|()| AllocErr::Exhausted {
-                request: layout
-            })
+            alloc_with_refill(size, head, policy)
+                .map_err(|()| AllocErr::Exhausted { request: layout })
         })
     }
 
@@ -1066,7 +1047,10 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
                 // immediately, whereas the consolidating with the next adjacent
                 // cell must be delayed, as explained above.
 
-                if let Some(prev) = free.header.prev_cell().and_then(|p| (*p).as_free_cell_mut()) {
+                if let Some(prev) = free.header
+                    .prev_cell()
+                    .and_then(|p| (*p).as_free_cell_mut())
+                {
                     prev.header.next_cell_raw = free.header.next_cell_raw;
                     if let Some(next) = free.header.next_cell() {
                         (*next).prev_cell = &mut prev.header;
@@ -1077,7 +1061,10 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
                     return;
                 }
 
-                if let Some(next) = free.header.next_cell().and_then(|n| (*n).as_free_cell_mut()) {
+                if let Some(next) = free.header
+                    .next_cell()
+                    .and_then(|n| (*n).as_free_cell_mut())
+                {
                     free.next_free_raw = next.next_free();
                     next.next_free_raw = free;
                     next.set_next_free_can_merge();

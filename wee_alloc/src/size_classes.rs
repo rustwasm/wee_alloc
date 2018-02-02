@@ -8,7 +8,7 @@ use units::{Bytes, RoundUpTo, Words};
 /// An array of free lists specialized for allocations of sizes
 /// `1..Self::NUM_SIZE_CLASSES + 1` words.
 pub(crate) struct SizeClasses(
-    pub(crate) [imp::Exclusive<*mut FreeCell>; SizeClasses::NUM_SIZE_CLASSES]
+    pub(crate) [imp::Exclusive<*mut FreeCell>; SizeClasses::NUM_SIZE_CLASSES],
 );
 
 impl ConstInit for SizeClasses {
@@ -44,7 +44,13 @@ impl<'a> AllocPolicy for SizeClassAllocPolicy<'a> {
         extra_assert!(next_cell != 0);
         let next_cell = ptr::NonNull::new_unchecked(next_cell as *mut CellHeader);
 
-        Ok(FreeCell::from_uninitialized(new_cell, next_cell, None, None, self as &AllocPolicy))
+        Ok(FreeCell::from_uninitialized(
+            new_cell,
+            next_cell,
+            None,
+            None,
+            self as &AllocPolicy,
+        ))
     }
 
     fn min_cell_size(&self, alloc_size: Words) -> Words {

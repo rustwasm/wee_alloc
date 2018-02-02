@@ -3,7 +3,7 @@ use const_init::ConstInit;
 use core::cell::UnsafeCell;
 use units::Pages;
 
-extern {
+extern "C" {
     #[link_name = "llvm.wasm.current.memory.i32"]
     fn current_memory() -> usize;
 
@@ -73,7 +73,7 @@ impl<T> Exclusive<T> {
     #[inline]
     pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
     where
-        F: FnOnce(&'a mut T) -> U
+        F: FnOnce(&'a mut T) -> U,
     {
         assert_not_in_use(self);
         set_in_use(self);

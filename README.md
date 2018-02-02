@@ -26,6 +26,8 @@ Although WebAssembly is the primary target, `wee_alloc` also has an `mmap` based
 implementation for unix systems. This enables testing `wee_alloc`, and code
 using `wee_alloc`, without a browser or WebAssembly engine.
 
+**⚠ Custom allocators currently require Nightly Rust. ⚠**
+
 - [Using `wee_alloc` as the Global Allocator](#using-wee_alloc-as-the-global-allocator)
   - [With `#![no_std]`](#with-no_std)
   - [With `std`](#with-std)
