@@ -1,6 +1,7 @@
 [package]
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
 categories = ["memory-management", "web-programming", "no-std"]
+description = "wee_alloc: The Wasm-Enabled, Elfin Allocator"
 license = "MPL-2.0"
 name = "wee_alloc"
 readme = "../README.md"
