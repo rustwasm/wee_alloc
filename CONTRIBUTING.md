@@ -77,7 +77,7 @@ various features and targets.
 $ ./test.sh
 ```
 
-## Automatic code formatting
+## Automatic Code Formatting
 
 We use [`rustfmt`](https://github.com/rust-lang-nursery/rustfmt) to enforce a
 consistent code style across the whole code base.
@@ -97,3 +97,56 @@ from the root of the repository:
 ```
 $ cargo fmt --all
 ```
+
+## Pull Requests
+
+All pull requests must be reviewed and approved of by at least one [team](#team)
+member before merging. See [Contributions We Want](#contributions-we-want) for
+details on what should be included in what kind of pull request.
+
+## Contributions We Want
+
+* **Bug fixes!** Include a regression test.
+
+* **Code size reductions!** Include before and after `.wasm` sizes (as reported
+  by `build.sh`) in your commit or pull request message.
+
+* **Performance improvements!** Include before and after `#[bench]` numbers, or
+  write a new `#[bench]` that exercises the code path, if none exists already.
+
+If you make two of these kinds of contributions, you should seriously consider
+joining our [team](#team)!
+
+Where we need help:
+
+* Issues labeled ["help wanted"][help-wanted] are issues where we could use a
+  little help from you.
+
+* Issues labeled ["mentored"][mentored] are issues that don't really involve any
+  more investigation, just implementation. We've outlined what needs to be done,
+  and a team_ member has volunteered to help whoever claims the issue implement
+  it, and get the implementation merged.
+
+* Issues labeled ["good first issue"][gfi] are issues where fixing them would be
+  a great introduction to the code base.
+
+[help-wanted]: https://github.com/fitzgen/wee_alloc/labels/help%20wanted
+
+[mentored]: https://github.com/fitzgen/wee_alloc/labels/mentored
+
+[gfi]: https://github.com/fitzgen/wee_alloc/labels/good%20first%20issue
+
+## Team
+
+* `fitzgen`
+
+Larger, more nuanced decisions about design, architecture, breaking changes,
+trade offs, etc are made by team consensus. In other words, decisions on things
+that aren't straightforward improvements or bug fixes to things that already
+exist in `wee_alloc`. If consensus can't be made, then `fitzgen` has the last
+word.
+
+**We need more team members!**
+[Drop a comment on this issue if you are interested in joining.][join]
+
+[join]: https://github.com/fitzgen/wee_alloc/issues/6
