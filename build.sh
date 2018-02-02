@@ -36,4 +36,37 @@ wasm-opt -Oz \
 
 wc -c ../target/wasm32-unknown-unknown/release/*.gc.opt.wasm
 
+set +x
+
+function dis_does_not_contain {
+    local matches=$(wasm-dis "$1" | grep "$2")
+    if [[ "$matches" != "" ]]; then
+        echo "ERROR! found $2 in $1:"
+        echo
+        echo "$matches"
+        echo
+        echo "wee_alloc should never pull in the panicking infrastructure"
+        exit 1
+    fi
+
+}
+
+function no_panic {
+    dis_does_not_contain $1 "panic"
+}
+
+function no_fmt {
+    dis_does_not_contain $1 "fmt"
+}
+
+function no_write {
+    dis_does_not_contain $1 "Write"
+}
+
+for x in ../target/wasm32-unknown-unknown/release/*.gc.wasm; do
+    no_panic "$x"
+    no_fmt "$x"
+    no_write "$x"
+done
+
 cd -
