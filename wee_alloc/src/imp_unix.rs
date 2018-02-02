@@ -6,12 +6,14 @@ use units::{Bytes, Pages};
 pub(crate) fn alloc_pages(pages: Pages) -> *mut u8 {
     let bytes: Bytes = pages.into();
     let addr = unsafe {
-        libc::mmap(0 as *mut _,
-                   bytes.0,
-                   libc::PROT_WRITE | libc::PROT_READ,
-                   libc::MAP_ANON | libc::MAP_PRIVATE,
-                   -1,
-                   0)
+        libc::mmap(
+            0 as *mut _,
+            bytes.0,
+            libc::PROT_WRITE | libc::PROT_READ,
+            libc::MAP_ANON | libc::MAP_PRIVATE,
+            -1,
+            0,
+        )
     };
     // TODO: when we can detect failure of wasm intrinsics, then both
     // `alloc_pages` implementations should return results, rather than
@@ -36,10 +38,9 @@ impl<T: ConstInit> ConstInit for Exclusive<T> {
         lock: UnsafeCell::new(libc::PTHREAD_MUTEX_INITIALIZER),
         inner: UnsafeCell::new(T::INIT),
         _no_false_sharing: [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
         ],
     };
 }
@@ -56,7 +57,7 @@ impl<T> Exclusive<T> {
     #[inline]
     pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
     where
-        F: FnOnce(&'a mut T) -> U
+        F: FnOnce(&'a mut T) -> U,
     {
         let code = libc::pthread_mutex_lock(&mut *self.lock.get());
         extra_assert_eq!(code, 0, "pthread_mutex_lock should run OK");

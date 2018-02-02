@@ -43,8 +43,8 @@ impl Operation {
 
         // Do a large allocation with probability P = 1/20.
         if g.gen_weighted_bool(20) {
-            let n = g.gen_range(1, 10) * max_small_alloc_size
-                + g.gen_range(0, max_small_alloc_size);
+            let n =
+                g.gen_range(1, 10) * max_small_alloc_size + g.gen_range(0, max_small_alloc_size);
             return Alloc(n);
         }
 
@@ -228,9 +228,7 @@ impl Operations {
             match op {
                 Alloc(n) => {
                     let layout = Layout::from_size_align(n, mem::size_of::<usize>()).unwrap();
-                    allocs.push(match unsafe {
-                        a.alloc(layout.clone())
-                    } {
+                    allocs.push(match unsafe { a.alloc(layout.clone()) } {
                         Ok(ptr) => Some((ptr, layout)),
                         Err(_) => None,
                     });
@@ -275,12 +273,9 @@ run_quickchecks!(quickchecks_7);
 
 #[test]
 fn multi_threaded_quickchecks() {
-    quickcheck::QuickCheck::new()
-        .tests(1)
-        .quickcheck(
-            Operations::run_multi_threaded
-                as fn(Operations, Operations, Operations, Operations) -> ()
-        );
+    quickcheck::QuickCheck::new().tests(1).quickcheck(
+        Operations::run_multi_threaded as fn(Operations, Operations, Operations, Operations) -> (),
+    );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -308,11 +303,7 @@ fn regression_test_2() {
 
 #[test]
 fn regression_test_3() {
-    Operations::run_single_threaded(Operations(vec![
-        Alloc(13672),
-        Free(0),
-        Alloc(1)
-    ]));
+    Operations::run_single_threaded(Operations(vec![Alloc(13672), Free(0), Alloc(1)]));
 }
 
 #[test]
@@ -390,26 +381,25 @@ fn stress() {
     unsafe {
         for _ in 0..100_000 {
             let free =
-                ptrs.len() > 0 &&
-                ((ptrs.len() < 1_000 && rng.gen_weighted_bool(3)) || rng.gen());
+                ptrs.len() > 0 && ((ptrs.len() < 1_000 && rng.gen_weighted_bool(3)) || rng.gen());
             if free {
                 let idx = rng.gen_range(0, ptrs.len());
                 let (ptr, layout): (_, Layout) = ptrs.swap_remove(idx);
                 a.dealloc(ptr, layout);
-                continue
+                continue;
             }
 
             if ptrs.len() > 0 && rng.gen_weighted_bool(100) {
                 let idx = rng.gen_range(0, ptrs.len());
                 let (ptr, old): (_, Layout) = ptrs.swap_remove(idx);
                 let new = if rng.gen() {
-                    Layout::from_size_align(rng.gen_range(old.size(), old.size() * 2),
-                                            old.align()).unwrap()
+                    Layout::from_size_align(rng.gen_range(old.size(), old.size() * 2), old.align())
+                        .unwrap()
                 } else if old.size() > 10 {
-                    Layout::from_size_align(rng.gen_range(old.size() / 2, old.size()),
-                                            old.align()).unwrap()
+                    Layout::from_size_align(rng.gen_range(old.size() / 2, old.size()), old.align())
+                        .unwrap()
                 } else {
-                    continue
+                    continue;
                 };
                 let mut tmp = Vec::new();
                 for i in 0..cmp::min(old.size(), new.size()) {
