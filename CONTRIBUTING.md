@@ -14,7 +14,10 @@ out to us in a GitHub issue, or ping `fitzgen` in [`#rust-wasm` on
   - [Type Checking](#type-checking)
   - [Building](#building)
   - [Testing](#testing)
-- [Automatic code formatting](#automatic-code-formatting)
+- [Automatic Code Formatting](#automatic-code-formatting)
+- [Pull Requests](#pull-requests)
+- [Contributions We Want](#contributions-we-want)
+- [Team](#team)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
