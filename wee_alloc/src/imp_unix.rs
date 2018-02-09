@@ -1,25 +1,22 @@
+use alloc::allocator::{Alloc, Layout};
 use const_init::ConstInit;
 use core::cell::UnsafeCell;
 use libc;
+use mmap_alloc::MapAllocBuilder;
 use units::{Bytes, Pages};
 
 pub(crate) fn alloc_pages(pages: Pages) -> *mut u8 {
-    let bytes: Bytes = pages.into();
-    let addr = unsafe {
-        libc::mmap(
-            0 as *mut _,
-            bytes.0,
-            libc::PROT_WRITE | libc::PROT_READ,
-            libc::MAP_ANON | libc::MAP_PRIVATE,
-            -1,
-            0,
-        )
-    };
-    // TODO: when we can detect failure of wasm intrinsics, then both
-    // `alloc_pages` implementations should return results, rather than
-    // asserting against failure.
-    assert!(addr != libc::MAP_FAILED);
-    addr as *mut u8
+    unsafe {
+        let bytes: Bytes = pages.into();
+        let layout = Layout::from_size_align_unchecked(bytes.0, 1);
+        // TODO: when we can detect failure of wasm intrinsics, then both
+        // `alloc_pages` implementations should return results, rather than
+        // panicking on failure.
+        MapAllocBuilder::default()
+            .build()
+            .alloc(layout)
+            .expect("failed to allocate page")
+    }
 }
 
 // Cache line size on an i7. Good enough.

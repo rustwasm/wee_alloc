@@ -26,3 +26,6 @@ use_std_for_test_debugging = []
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
 default-features = false
 version = "0.2"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies.mmap-alloc]
+version = "0.2"
