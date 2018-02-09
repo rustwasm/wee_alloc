@@ -844,27 +844,29 @@ where
 
         let mut current_free = &mut *current_free;
 
-        if policy.should_merge_adjacent_free_cells() {
-            // Now check if this cell can merge with the next cell in the free
-            // list. We do this after the initial allocation attempt so that we
-            // don't merge, only to immediately split the cell again right
-            // afterwards.
-            while current_free.next_free_can_merge() {
-                let prev_adjacent = current_free.header.prev_cell_raw as *mut FreeCell;
-                extra_assert_eq!(prev_adjacent, current_free.next_free());
-                let prev_adjacent = &mut *prev_adjacent;
+        // Now check if this cell can merge with the next cell in the free
+        // list.
+        //
+        // We don't re-check `policy.should_merge_adjacent_free_cells()` because
+        // the `NEXT_FREE_CELL_CAN_MERGE` bit only gets set after checking with
+        // the policy.
+        while current_free.next_free_can_merge() {
+            extra_assert!(policy.should_merge_adjacent_free_cells());
 
-                (*prev_adjacent).header.next_cell_raw = current_free.header.next_cell_raw;
-                if let Some(next) = current_free.header.next_cell() {
-                    (*next).prev_cell_raw = &mut prev_adjacent.header;
-                }
+            let prev_adjacent = current_free.header.prev_cell_raw as *mut FreeCell;
+            extra_assert_eq!(prev_adjacent, current_free.next_free());
+            let prev_adjacent = &mut *prev_adjacent;
 
-                *previous_free = prev_adjacent;
-                current_free = prev_adjacent;
-
-                write_free_pattern(current_free, policy);
-                assert_local_cell_invariants(&mut current_free.header);
+            (*prev_adjacent).header.next_cell_raw = current_free.header.next_cell_raw;
+            if let Some(next) = current_free.header.next_cell() {
+                (*next).prev_cell_raw = &mut prev_adjacent.header;
             }
+
+            *previous_free = prev_adjacent;
+            current_free = prev_adjacent;
+
+            write_free_pattern(current_free, policy);
+            assert_local_cell_invariants(&mut current_free.header);
         }
 
         if let Some(result) = f(previous_free, current_free) {
