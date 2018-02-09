@@ -229,6 +229,8 @@ extern crate core;
 
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 extern crate libc;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+extern crate mmap_alloc;
 
 #[macro_use]
 mod extra_assert;
