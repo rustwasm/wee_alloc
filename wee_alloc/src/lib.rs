@@ -283,7 +283,7 @@ extra_only! {
 #[repr(C)]
 struct CellHeader {
     next_cell_raw: ptr::NonNull<CellHeader>,
-    prev_cell: *mut CellHeader,
+    prev_cell_raw: *mut CellHeader,
 }
 
 #[repr(C)]
@@ -415,10 +415,10 @@ impl CellHeader {
     }
 
     fn prev_cell(&self) -> Option<*mut CellHeader> {
-        if self.prev_cell.is_null() {
+        if self.prev_cell_raw.is_null() {
             None
         } else {
-            Some(self.prev_cell)
+            Some(self.prev_cell_raw)
         }
     }
 
@@ -460,7 +460,7 @@ impl FreeCell {
     // true:
     //
     // * `FreeCell::next_free_raw` (and'd with the mask) is not null.
-    // * `FreeCell::next_free_raw` is the adjacent `CellHeader::prev_cell`.
+    // * `FreeCell::next_free_raw` is the adjacent `CellHeader::prev_cell_raw`.
     //
     // Therefore, this free cell can be merged into a single, larger, contiguous
     // free cell with its previous neighbor, which is also the next cell in the
@@ -505,7 +505,7 @@ impl FreeCell {
             FreeCell {
                 header: CellHeader {
                     next_cell_raw: next_cell,
-                    prev_cell,
+                    prev_cell_raw: prev_cell,
                 },
                 next_free_raw: next_free,
             },
@@ -575,7 +575,7 @@ impl FreeCell {
 
             if let Some(next) = self.header.next_cell() {
                 unsafe {
-                    (*next).prev_cell = &mut remainder.header;
+                    (*next).prev_cell_raw = &mut remainder.header;
                 }
             }
             self.header.next_cell_raw =
@@ -676,7 +676,7 @@ extra_only! {
             if let Some(cell_ref) = cell.as_ref() {
                 assert!(cell_ref.size() >= size_of::<usize>());
 
-                if let Some(prev) = cell_ref.prev_cell.as_ref() {
+                if let Some(prev) = cell_ref.prev_cell().and_then(|p| p.as_ref()) {
                     assert!(prev.size() >= size_of::<usize>());
                     assert!(!prev.next_cell_is_invalid());
                     assert_eq!(prev.next_cell_unchecked(), cell, "next(prev(cell)) == cell");
@@ -686,7 +686,7 @@ extra_only! {
                     assert!(!next.is_null());
                     let next = &*next;
                     assert!(next.size() >= size_of::<usize>());
-                    assert_eq!(next.prev_cell, cell, "prev(next(cell)) == cell");
+                    assert_eq!(next.prev_cell_raw, cell, "prev(next(cell)) == cell");
                 }
 
                 if let Some(free) = cell_ref.as_free_cell() {
@@ -844,27 +844,29 @@ where
 
         let mut current_free = &mut *current_free;
 
-        if policy.should_merge_adjacent_free_cells() {
-            // Now check if this cell can merge with the next cell in the free
-            // list. We do this after the initial allocation attempt so that we
-            // don't merge, only to immediately split the cell again right
-            // afterwards.
-            while current_free.next_free_can_merge() {
-                let prev_adjacent = current_free.header.prev_cell as *mut FreeCell;
-                extra_assert_eq!(prev_adjacent, current_free.next_free());
-                let prev_adjacent = &mut *prev_adjacent;
+        // Now check if this cell can merge with the next cell in the free
+        // list.
+        //
+        // We don't re-check `policy.should_merge_adjacent_free_cells()` because
+        // the `NEXT_FREE_CELL_CAN_MERGE` bit only gets set after checking with
+        // the policy.
+        while current_free.next_free_can_merge() {
+            extra_assert!(policy.should_merge_adjacent_free_cells());
 
-                (*prev_adjacent).header.next_cell_raw = current_free.header.next_cell_raw;
-                if let Some(next) = current_free.header.next_cell() {
-                    (*next).prev_cell = &mut prev_adjacent.header;
-                }
+            let prev_adjacent = current_free.header.prev_cell_raw as *mut FreeCell;
+            extra_assert_eq!(prev_adjacent, current_free.next_free());
+            let prev_adjacent = &mut *prev_adjacent;
 
-                *previous_free = prev_adjacent;
-                current_free = prev_adjacent;
-
-                write_free_pattern(current_free, policy);
-                assert_local_cell_invariants(&mut current_free.header);
+            (*prev_adjacent).header.next_cell_raw = current_free.header.next_cell_raw;
+            if let Some(next) = current_free.header.next_cell() {
+                (*next).prev_cell_raw = &mut prev_adjacent.header;
             }
+
+            *previous_free = prev_adjacent;
+            current_free = prev_adjacent;
+
+            write_free_pattern(current_free, policy);
+            assert_local_cell_invariants(&mut current_free.header);
         }
 
         if let Some(result) = f(previous_free, current_free) {
@@ -1055,7 +1057,7 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
                 {
                     prev.header.next_cell_raw = free.header.next_cell_raw;
                     if let Some(next) = free.header.next_cell() {
-                        (*next).prev_cell = &mut prev.header;
+                        (*next).prev_cell_raw = &mut prev.header;
                     }
 
                     write_free_pattern(prev, policy);
