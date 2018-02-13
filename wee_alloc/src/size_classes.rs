@@ -3,7 +3,7 @@ use const_init::ConstInit;
 use core::cmp;
 use core::ptr;
 use imp;
-use units::{Bytes, RoundUpTo, Words};
+use memory_units::{Bytes, RoundUpTo, Words};
 
 /// An array of free lists specialized for allocations of sizes
 /// `1..Self::NUM_SIZE_CLASSES + 1` words.

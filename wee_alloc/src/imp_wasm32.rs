@@ -1,7 +1,7 @@
 use super::{assert_is_word_aligned, PAGE_SIZE};
 use const_init::ConstInit;
 use core::cell::UnsafeCell;
-use units::Pages;
+use memory_units::Pages;
 
 extern "C" {
     #[link_name = "llvm.wasm.grow.memory.i32"]
