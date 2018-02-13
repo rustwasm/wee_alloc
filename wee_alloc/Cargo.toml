@@ -23,6 +23,9 @@ size_classes = []
 # This is for internal use only.
 use_std_for_test_debugging = []
 
+[dependencies]
+memory_units = "0.3.0"
+
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
 default-features = false
 version = "0.2"

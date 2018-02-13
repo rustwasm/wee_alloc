@@ -3,7 +3,7 @@ use const_init::ConstInit;
 use core::cell::UnsafeCell;
 use libc;
 use mmap_alloc::MapAllocBuilder;
-use units::{Bytes, Pages};
+use memory_units::{Bytes, Pages};
 
 pub(crate) fn alloc_pages(pages: Pages) -> *mut u8 {
     unsafe {

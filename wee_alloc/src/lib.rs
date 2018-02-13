@@ -232,6 +232,8 @@ extern crate libc;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 extern crate mmap_alloc;
 
+extern crate memory_units;
+
 #[macro_use]
 mod extra_assert;
 
@@ -255,15 +257,13 @@ use imp_unix as imp;
 #[cfg(feature = "size_classes")]
 mod size_classes;
 
-mod units;
-
 use alloc::heap::{Alloc, AllocErr, Layout};
 use const_init::ConstInit;
 use core::isize;
 use core::marker::Sync;
 use core::mem;
 use core::ptr;
-use units::{size_of, Bytes, Pages, RoundUpTo, Words};
+use memory_units::{size_of, Bytes, Pages, RoundUpTo, Words};
 
 /// The WebAssembly page size, in bytes.
 pub const PAGE_SIZE: Bytes = Bytes(65536);
