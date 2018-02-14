@@ -10,9 +10,15 @@ use winapi::um::synchapi::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 use winapi::um::winbase::{WAIT_OBJECT_0, INFINITE};
 use winapi::um::winnt::{HANDLE, MEM_COMMIT, PAGE_READWRITE};
 
-pub(crate) fn alloc_pages(pages: Pages) -> *mut u8 {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
     let bytes: Bytes = pages.into();
-    unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) as *mut u8 }
+    let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) as *mut u8 };
+
+    if !ptr.is_null() {
+        Ok(ptr)
+    } else {
+        Err(())
+    }
 }
 
 // Cache line size on an i7. Good enough.

@@ -800,7 +800,7 @@ impl AllocPolicy for LargeAllocPolicy {
     unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut FreeCell, ()> {
         let size: Bytes = size.into();
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
-        let new_pages = imp::alloc_pages(pages);
+        let new_pages = imp::alloc_pages(pages)?;
         let allocated_size: Bytes = pages.into();
         let next_cell = new_pages.offset(allocated_size.0 as isize);
         let next_cell = next_cell as usize | CellHeader::NEXT_CELL_IS_INVALID;

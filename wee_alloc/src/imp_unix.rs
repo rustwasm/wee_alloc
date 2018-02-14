@@ -5,17 +5,15 @@ use libc;
 use mmap_alloc::MapAllocBuilder;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages(pages: Pages) -> *mut u8 {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
     unsafe {
         let bytes: Bytes = pages.into();
         let layout = Layout::from_size_align_unchecked(bytes.0, 1);
-        // TODO: when we can detect failure of wasm intrinsics, then both
-        // `alloc_pages` implementations should return results, rather than
-        // panicking on failure.
+
         MapAllocBuilder::default()
             .build()
             .alloc(layout)
-            .expect("failed to allocate page")
+            .map_err(|_| ())
     }
 }
 
