@@ -8,12 +8,15 @@ extern "C" {
     fn grow_memory(pages: usize) -> i32;
 }
 
-pub(crate) unsafe fn alloc_pages(n: Pages) -> *mut u8 {
+pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<*mut u8, ()> {
     let ptr = grow_memory(n.0);
-    extra_assert!(ptr != -1);
-    let ptr = (ptr as usize * PAGE_SIZE.0) as _;
-    assert_is_word_aligned(ptr);
-    ptr
+    if -1 != ptr {
+        let ptr = (ptr as usize * PAGE_SIZE.0) as _;
+        assert_is_word_aligned(ptr);
+        Ok(ptr)
+    } else {
+        Err(())
+    }
 }
 
 pub(crate) struct Exclusive<T> {
