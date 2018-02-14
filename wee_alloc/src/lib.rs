@@ -231,6 +231,8 @@ extern crate core;
 extern crate libc;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 extern crate mmap_alloc;
+#[cfg(windows)]
+extern crate winapi;
 
 extern crate memory_units;
 
@@ -239,7 +241,7 @@ mod extra_assert;
 
 mod const_init;
 
-#[cfg(all(not(unix), not(target_arch = "wasm32")))]
+#[cfg(all(not(unix), not(windows), not(target_arch = "wasm32")))]
 compile_error! {
     "There is no `wee_alloc` implementation for this target; want to send a pull request? :)"
 }
@@ -253,6 +255,11 @@ use imp_wasm32 as imp;
 mod imp_unix;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 use imp_unix as imp;
+
+#[cfg(windows)]
+mod imp_windows;
+#[cfg(windows)]
+use imp_windows as imp;
 
 #[cfg(feature = "size_classes")]
 mod size_classes;
