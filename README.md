@@ -23,8 +23,9 @@ for small code size. In contrast, `wee_alloc` would be a poor choice for a
 scenario where allocation is a performance bottleneck.
 
 Although WebAssembly is the primary target, `wee_alloc` also has an `mmap` based
-implementation for unix systems. This enables testing `wee_alloc`, and code
-using `wee_alloc`, without a browser or WebAssembly engine.
+implementation for unix systems and a `VirtualAlloc` implementation for Windows.
+This enables testing `wee_alloc`, and code using `wee_alloc`, without a browser
+or WebAssembly engine.
 
 **⚠ Custom allocators currently require Nightly Rust. ⚠**
 
