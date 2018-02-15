@@ -141,7 +141,9 @@ Where we need help:
 
 ## Team
 
-* `fitzgen`
+| [<img alt="fitzgen" src="https://avatars2.githubusercontent.com/u/74571?s=117&v=4" width="117">](https://github.com/fitzgen) | [<img alt="pepyakin" src="https://avatars0.githubusercontent.com/u/2205845?s=117&v=4" width="117">](https://github.com/pepyakin) | [<img alt="DrGoldfire" src="https://avatars3.githubusercontent.com/u/1772277?s=117&v=4" width="117">](https://github.com/DrGoldfire) |
+|:---:|:---:|:---:|
+| [`fitzgen`](https://github.com/fitzgen) | [`pepyakin`](https://github.com/pepyakin) | [`DrGoldfire`](https://github.com/DrGoldfire) |
 
 Larger, more nuanced decisions about design, architecture, breaking changes,
 trade offs, etc are made by team consensus. In other words, decisions on things
