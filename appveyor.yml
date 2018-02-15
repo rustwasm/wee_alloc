@@ -1,0 +1,27 @@
+version: "{build}"
+image: Visual Studio 2017
+install:
+- cmd: >-
+    appveyor DownloadFile https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe
+
+    rustup-init.exe -y --default-toolchain nightly
+
+    set PATH=%PATH%;%USERPROFILE%\.cargo\bin
+build_script:
+- cmd: >-
+    cd %APPVEYOR_BUILD_FOLDER%\wee_alloc
+
+    cargo build
+
+    cargo build --features size_classes
+test_script:
+- cmd: >-
+    cd %APPVEYOR_BUILD_FOLDER%\test
+
+    cargo test --release --features "extra_assertions size_classes"
+
+    cargo test --release --features "extra_assertions"
+
+    cargo test --release --features "size_classes"
+
+    cargo test --release
