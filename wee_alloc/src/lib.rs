@@ -999,7 +999,13 @@ unsafe impl<'a> Alloc for &'a WeeAlloc {
 
         let size = Bytes(layout.size());
         if size.0 == 0 {
-            return Ok(0x1 as *mut u8);
+            // Ensure that our made up pointer is properly aligned.
+            let ptr = if layout.align() > 0 {
+                layout.align()
+            } else {
+                0x1
+            };
+            return Ok(ptr as *mut u8);
         }
 
         let size: Words = size.round_up_to();
