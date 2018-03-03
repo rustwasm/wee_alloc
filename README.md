@@ -115,8 +115,6 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 - `wee_alloc` imposes two words of overhead on each allocation for maintaining
   its internal free lists.
 
-- The maximum alignment supported is word alignment.
-
 - Deallocation is an *O(1)* operation.
 
 - `wee_alloc` will never return freed pages to the WebAssembly engine /

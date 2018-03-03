@@ -115,8 +115,6 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 - `wee_alloc` imposes two words of overhead on each allocation for maintaining
   its internal free lists.
 
-- The maximum alignment supported is word alignment.
-
 - Deallocation is an *O(1)* operation.
 
 - `wee_alloc` will never return freed pages to the WebAssembly engine /
@@ -268,6 +266,7 @@ mod size_classes;
 
 use alloc::heap::{Alloc, AllocErr, Layout};
 use const_init::ConstInit;
+use core::cmp;
 use core::isize;
 use core::marker::Sync;
 use core::mem;
@@ -279,13 +278,19 @@ pub const PAGE_SIZE: Bytes = Bytes(65536);
 
 extra_only! {
     fn assert_is_word_aligned<T>(ptr: *mut T) {
-        use core::mem;
-        assert_eq!(
-            ptr as usize % mem::size_of::<usize>(),
+        assert_aligned_to(ptr, size_of::<usize>());
+    }
+}
+
+extra_only! {
+    fn assert_aligned_to<T>(ptr: *mut T, align: Bytes) {
+        extra_assert_eq!(
+            ptr as usize % align.0,
             0,
-            "{:p} is not word-aligned",
-            ptr
-        )
+            "{:p} is not aligned to {}",
+            ptr,
+            align.0
+        );
     }
 }
 
@@ -460,6 +465,21 @@ impl CellHeader {
             None
         }
     }
+
+    // Get a pointer to this cell's data without regard to whether this cell is
+    // allocated or free.
+    unsafe fn unchecked_data(&self) -> *mut u8 {
+        (self as *const CellHeader).offset(1) as *const u8 as *mut u8
+    }
+
+    // Is this cell aligned to the given power-of-2 alignment?
+    fn is_aligned_to<B: Into<Bytes>>(&self, align: B) -> bool {
+        let align = align.into();
+        extra_assert!(align.0.is_power_of_two());
+
+        let data = unsafe { self.unchecked_data() } as usize;
+        data & (align.0 - 1) == 0
+    }
 }
 
 impl FreeCell {
@@ -531,79 +551,79 @@ impl FreeCell {
         unsafe { mem::transmute(self) }
     }
 
-    fn should_split_for(&self, alloc_size: Words, policy: &AllocPolicy) -> bool {
-        let self_size = self.header.size();
-
-        let min_cell_size: Bytes = policy.min_cell_size(alloc_size).into();
-        extra_assert!(min_cell_size >= size_of::<usize>());
-
-        let alloc_size: Bytes = alloc_size.into();
-        extra_assert!(self_size >= alloc_size);
-
-        self_size - alloc_size >= min_cell_size + size_of::<CellHeader>()
-    }
-
-    fn split_alloc(
-        &mut self,
+    // Try and satisfy the given allocation request with this cell.
+    fn try_alloc<'a>(
+        &'a mut self,
         previous: &mut *mut FreeCell,
         alloc_size: Words,
+        align: Bytes,
         policy: &AllocPolicy,
-    ) -> Option<&mut AllocatedCell> {
-        extra_assert_eq!(*previous, self as *mut FreeCell);
-        extra_assert!(self.header.size() >= alloc_size.into());
-        extra_assert!(alloc_size >= size_of::<usize>().round_up_to());
+    ) -> Option<&'a mut AllocatedCell> {
+        extra_assert!(alloc_size.0 > 0);
+        extra_assert!(align.0 > 0);
+        extra_assert!(align.0.is_power_of_two());
 
-        if self.should_split_for(alloc_size, policy) {
-            let orig_size = self.header.size();
+        // First, do a quick check that this cell can hold an allocation of the
+        // requested size.
+        let size: Bytes = alloc_size.into();
+        if self.header.size() < size {
+            return None;
+        }
 
-            let alloc_size: Bytes = alloc_size.into();
-            extra_assert!((alloc_size.0 as isize) < isize::MAX);
-
-            let remainder = unsafe {
-                let data = (&mut self.header as *mut CellHeader).offset(1) as *mut u8;
-                data.offset(alloc_size.0 as isize)
-            };
-            extra_assert!((remainder as usize) < (self.header.next_cell_unchecked() as usize));
-
-            let remainder_size = self.header.size() - alloc_size - size_of::<CellHeader>();
-            extra_assert_eq!(
-                remainder_size.0,
-                (self.header.next_cell_unchecked() as usize) - (remainder as usize)
-                    - size_of::<CellHeader>().0
-            );
-
-            let remainder = unsafe {
+        // Next, try and allocate by splitting this cell in two, and returning
+        // the second half.
+        //
+        // We allocate from the end, rather than the beginning, of this cell for
+        // two reasons:
+        //
+        // 1. It allows us to satisfy alignment requests, since we can choose to
+        //    split at some alignment and return the aligned cell at the end.
+        //
+        // 2. It involves fewer writes to maintain the free list links, since this
+        //    cell is already in the free list, and after splitting that means that
+        //    the front half is also already in the free list.
+        let next = self.header.next_cell_unchecked() as usize;
+        let align: Bytes = align.into();
+        let split_and_aligned = (next - size.0) & !(align.0 - 1);
+        let data = unsafe { self.header.unchecked_data() } as usize;
+        let min_cell_size: Bytes = policy.min_cell_size(alloc_size).into();
+        if data + size_of::<CellHeader>().0 + min_cell_size.0 <= split_and_aligned {
+            let split_cell_head = split_and_aligned - size_of::<CellHeader>().0;
+            let split_cell = unsafe {
                 &mut *FreeCell::from_uninitialized(
-                    remainder,
+                    split_cell_head as *mut u8,
                     self.header.next_cell_raw,
                     Some(&mut self.header),
-                    Some(self.next_free()),
+                    None,
                     policy,
                 )
             };
 
             if let Some(next) = self.header.next_cell() {
                 unsafe {
-                    (*next).prev_cell_raw = &mut remainder.header;
+                    (*next).prev_cell_raw = &mut split_cell.header;
                 }
             }
+
             self.header.next_cell_raw =
-                unsafe { ptr::NonNull::new_unchecked(&mut remainder.header) };
+                unsafe { ptr::NonNull::new_unchecked(&mut split_cell.header) };
 
-            extra_assert_eq!(
-                self.header.size() + remainder.header.size(),
-                orig_size - size_of::<CellHeader>()
-            );
-            assert_local_cell_invariants(&mut self.header);
-            assert_local_cell_invariants(&mut remainder.header);
-
-            *previous = remainder;
-            assert_is_valid_free_list(*previous, policy);
-
-            Some(self.into_allocated_cell(policy))
-        } else {
-            None
+            return Some(split_cell.into_allocated_cell(policy));
         }
+
+        // There isn't enough room to split this cell and still satisfy the
+        // requested allocation. Because of the early check, we know this cell
+        // is large enough to fit the requested size, but is the cell's data
+        // properly aligned?
+        let align: Bytes = align.into();
+        if self.header.is_aligned_to(align) {
+            *previous = self.next_free();
+            let allocated = self.into_allocated_cell(policy);
+            assert_is_valid_free_list(*previous, policy);
+            return Some(allocated);
+        }
+
+        None
     }
 
     fn insert_into_free_list<'a>(
@@ -777,7 +797,8 @@ extra_only! {
 }
 
 trait AllocPolicy {
-    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut FreeCell, ()>;
+    unsafe fn new_cell_for_free_list(&self, size: Words, align: Bytes)
+        -> Result<*mut FreeCell, ()>;
 
     fn min_cell_size(&self, alloc_size: Words) -> Words;
 
@@ -799,8 +820,19 @@ impl LargeAllocPolicy {
 }
 
 impl AllocPolicy for LargeAllocPolicy {
-    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut FreeCell, ()> {
-        let size: Bytes = size.into();
+    unsafe fn new_cell_for_free_list(
+        &self,
+        size: Words,
+        align: Bytes,
+    ) -> Result<*mut FreeCell, ()> {
+        // To assure that an allocation will always succeed after refilling the
+        // free list with this new cell, make sure that we allocate enough to
+        // fulfill the requested alignment, and still have the minimum cell size
+        // left over.
+        let size: Bytes = cmp::max(
+            size.into(),
+            ((align + Self::MIN_CELL_SIZE) * Words(2)).into(),
+        );
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
         let new_pages = imp::alloc_pages(pages)?;
         let allocated_size: Bytes = pages.into();
@@ -889,6 +921,7 @@ where
 /// Do a first-fit allocation from the given free list.
 unsafe fn alloc_first_fit(
     size: Words,
+    align: Bytes,
     head: &mut *mut FreeCell,
     policy: &AllocPolicy,
 ) -> Result<*mut u8, ()> {
@@ -897,38 +930,35 @@ unsafe fn alloc_first_fit(
     walk_free_list(head, policy, |previous, current| {
         extra_assert_eq!(*previous, current as *mut _);
 
-        // Check whether this cell is large enough to satisfy this allocation.
-        if current.header.size() < size.into() {
-            return None;
-        }
-
-        // The cell is large enough for this allocation -- maybe *too*
-        // large. Try splitting it.
-        if let Some(allocated) = current.split_alloc(previous, size, policy) {
+        if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
+            assert_aligned_to(allocated.data(), align);
             return Some(allocated.data());
         }
 
-        // This cell has crazy Goldilocks levels of "just right". Use it as-is
-        // without any splitting.
-        *previous = current.next_free();
-        assert_is_valid_free_list(*previous, policy);
-        let allocated = current.into_allocated_cell(policy);
-        Some(allocated.data())
+        None
     })
 }
 
 unsafe fn alloc_with_refill(
     size: Words,
+    align: Bytes,
     head: &mut *mut FreeCell,
     policy: &AllocPolicy,
 ) -> Result<*mut u8, ()> {
-    if let Ok(result) = alloc_first_fit(size, head, policy) {
+    if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
     }
 
-    let cell = policy.new_cell_for_free_list(size)?;
+    let cell = policy.new_cell_for_free_list(size, align)?;
     let head = (*cell).insert_into_free_list(head, policy);
-    alloc_first_fit(size, head, policy)
+
+    let result = alloc_first_fit(size, align, head, policy);
+    extra_assert!(
+        result.is_ok(),
+        "if refilling the free list succeeds, then retrying the allocation \
+         should also always succeed"
+    );
+    result
 }
 
 /// A wee allocator.
@@ -963,23 +993,28 @@ impl WeeAlloc {
     pub const INIT: Self = <Self as ConstInit>::INIT;
 
     #[cfg(feature = "size_classes")]
-    unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, f: F) -> T
+    unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, align: Bytes, f: F) -> T
     where
         F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T,
     {
         extra_assert!(size.0 > 0);
-        if let Some(head) = self.size_classes.get(size) {
-            let policy = size_classes::SizeClassAllocPolicy(&self.head);
-            let policy = &policy as &AllocPolicy;
-            head.with_exclusive_access(|head| f(head, policy))
-        } else {
-            let policy = &LARGE_ALLOC_POLICY as &AllocPolicy;
-            self.head.with_exclusive_access(|head| f(head, policy))
+        extra_assert!(align.0 > 0);
+
+        let align: Bytes = align.into();
+        if align <= size_of::<usize>() {
+            if let Some(head) = self.size_classes.get(size) {
+                let policy = size_classes::SizeClassAllocPolicy(&self.head);
+                let policy = &policy as &AllocPolicy;
+                return head.with_exclusive_access(|head| f(head, policy));
+            }
         }
+
+        let policy = &LARGE_ALLOC_POLICY as &AllocPolicy;
+        self.head.with_exclusive_access(|head| f(head, policy))
     }
 
     #[cfg(not(feature = "size_classes"))]
-    unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, f: F) -> T
+    unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, _align: Bytes, f: F) -> T
     where
         F: for<'a> FnOnce(&'a mut *mut FreeCell, &'a AllocPolicy) -> T,
     {
@@ -991,40 +1026,38 @@ impl WeeAlloc {
 
 unsafe impl<'a> Alloc for &'a WeeAlloc {
     unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
-        if layout.align() > ::core::mem::size_of::<usize>() {
-            return Err(AllocErr::Unsupported {
-                details: "wee_alloc cannot align to more than word alignment",
-            });
-        }
-
         let size = Bytes(layout.size());
+        let align = if layout.align() == 0 {
+            Bytes(1)
+        } else {
+            Bytes(layout.align())
+        };
+
         if size.0 == 0 {
-            // Ensure that our made up pointer is properly aligned.
-            let ptr = if layout.align() > 0 {
-                layout.align()
-            } else {
-                0x1
-            };
-            return Ok(ptr as *mut u8);
+            // Ensure that our made up pointer is properly aligned by using the
+            // alignment as the pointer.
+            return Ok(align.0 as *mut u8);
         }
 
         let size: Words = size.round_up_to();
-        self.with_free_list_and_policy_for_size(size, |head, policy| {
+
+        self.with_free_list_and_policy_for_size(size, align, |head, policy| {
             assert_is_valid_free_list(*head, policy);
-            alloc_with_refill(size, head, policy)
+            alloc_with_refill(size, align, head, policy)
                 .map_err(|()| AllocErr::Exhausted { request: layout })
         })
     }
 
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         let size = Bytes(layout.size());
-
         if size.0 == 0 || ptr.is_null() {
             return;
         }
 
         let size: Words = size.round_up_to();
-        self.with_free_list_and_policy_for_size(size, |head, policy| {
+        let align = Bytes(layout.align());
+
+        self.with_free_list_and_policy_for_size(size, align, |head, policy| {
             let cell = (ptr as *mut CellHeader).offset(-1);
             let cell = &mut *cell;
 
