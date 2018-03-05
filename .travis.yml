@@ -25,7 +25,7 @@ before_script:
   - which cargo-readme || cargo install cargo-readme
   - test -d binaryen || git clone https://github.com/WebAssembly/binaryen.git
   - export PATH="$PATH:$(pwd)/binaryen/bin"
-  - which wasm-opt || (cd binaryen && cmake . && make -j4 && cd -)
+  - which wasm-opt || (cd binaryen && git pull origin master && cmake . && make -j4 && cd -)
 
 script:
   - "$SCRIPT"
