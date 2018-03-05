@@ -4,15 +4,6 @@ cache: cargo
 rust:
   - nightly
 
-# For `binaryen`.
-addons:
-  apt:
-    sources:
-      - 'ubuntu-toolchain-r-test'
-    packages:
-      - 'cmake'
-      - 'g++-5'
-
 env:
   matrix:
     - SCRIPT="./check.sh"
@@ -23,9 +14,6 @@ before_script:
   - rustup target add wasm32-unknown-unknown
   - which wasm-gc || cargo install --git https://github.com/alexcrichton/wasm-gc
   - which cargo-readme || cargo install cargo-readme
-  - test -d binaryen || git clone https://github.com/WebAssembly/binaryen.git
-  - export PATH="$PATH:$(pwd)/binaryen/bin"
-  - which wasm-opt || (cd binaryen && git pull origin master && cmake . && make -j4 && cd -)
 
 script:
   - "$SCRIPT"
