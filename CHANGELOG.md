@@ -1,6 +1,8 @@
 ### 0.2.0
 
-Released 2018/03/05.
+Released 2018/03/06.
+
+* Added support for allocations with arbitrary alignments.
 
 * Updated to work with rustc's LLVM 6 upgrade and the change of intrinsic link
   names.
