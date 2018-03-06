@@ -22,17 +22,23 @@ cargo build --release                         --target wasm32-unknown-unknown
 
 wasm-gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
         ../target/wasm32-unknown-unknown/release/wee_alloc_example.gc.wasm
-wasm-opt -Oz \
-         ../target/wasm32-unknown-unknown/release/wee_alloc_example.gc.wasm \
-         -o ../target/wasm32-unknown-unknown/release/wee_alloc_example.gc.opt.wasm
+
+if which wasm-opt; then
+    wasm-opt -Oz \
+             ../target/wasm32-unknown-unknown/release/wee_alloc_example.gc.wasm \
+             -o ../target/wasm32-unknown-unknown/release/wee_alloc_example.gc.opt.wasm
+fi
 
 cargo build --release --features size_classes --target wasm32-unknown-unknown
 
 wasm-gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
         ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.wasm
-wasm-opt -Oz \
-         ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.wasm \
-         -o ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.opt.wasm
+
+if which wasm-opt; then
+    wasm-opt -Oz \
+             ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.wasm \
+             -o ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.opt.wasm
+fi
 
 wc -c ../target/wasm32-unknown-unknown/release/*.gc.opt.wasm
 

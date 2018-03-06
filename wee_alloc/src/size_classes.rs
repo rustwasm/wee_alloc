@@ -3,7 +3,7 @@ use const_init::ConstInit;
 use core::cmp;
 use core::ptr;
 use imp;
-use memory_units::{Bytes, RoundUpTo, Words};
+use memory_units::{size_of, Bytes, RoundUpTo, Words};
 
 /// An array of free lists specialized for allocations of sizes
 /// `1..Self::NUM_SIZE_CLASSES + 1` words.
@@ -31,11 +31,25 @@ const MIN_NEW_CELL_SIZE: Bytes = Bytes(8192);
 pub(crate) struct SizeClassAllocPolicy<'a>(pub(crate) &'a imp::Exclusive<*mut FreeCell>);
 
 impl<'a> AllocPolicy for SizeClassAllocPolicy<'a> {
-    unsafe fn new_cell_for_free_list(&self, size: Words) -> Result<*mut FreeCell, ()> {
-        let new_cell_size = cmp::max(size * size, MIN_NEW_CELL_SIZE.round_up_to());
+    unsafe fn new_cell_for_free_list(
+        &self,
+        size: Words,
+        align: Bytes,
+    ) -> Result<*mut FreeCell, ()> {
+        extra_assert!(align.0 > 0);
+        extra_assert!(align.0.is_power_of_two());
+        extra_assert!(align <= size_of::<usize>());
+
+        // Need room for at least size^2 allocations.
+        let size_of_header: Words = size_of::<CellHeader>().round_up_to();
+        let size_with_header = size + size_of_header;
+        let new_cell_size = cmp::max(
+            size_with_header * size_with_header,
+            MIN_NEW_CELL_SIZE.round_up_to(),
+        );
 
         let new_cell = self.0.with_exclusive_access(|head| {
-            alloc_with_refill(new_cell_size, head, &LargeAllocPolicy)
+            alloc_with_refill(new_cell_size, size_of::<usize>(), head, &LargeAllocPolicy)
         })?;
 
         let new_cell_size: Bytes = new_cell_size.into();

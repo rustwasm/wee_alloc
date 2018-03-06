@@ -1,6 +1,7 @@
 #![feature(alloc, allocator_api)]
 
 extern crate alloc;
+#[macro_use]
 extern crate quickcheck;
 extern crate rand;
 extern crate wee_alloc;
@@ -276,6 +277,20 @@ fn multi_threaded_quickchecks() {
     quickcheck::QuickCheck::new().tests(1).quickcheck(
         Operations::run_multi_threaded as fn(Operations, Operations, Operations, Operations) -> (),
     );
+}
+
+#[cfg(test)]
+static ALIGNS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+
+quickcheck! {
+    fn single_allocation_with_size_and_align(size: usize, align: usize) -> () {
+        let size = size % 65536;
+        let align = ALIGNS[align % ALIGNS.len()];
+
+        let mut w = &wee_alloc::WeeAlloc::INIT;
+        let layout = alloc::heap::Layout::from_size_align(size, align).unwrap();
+        let _ = unsafe { w.alloc(layout) };
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
