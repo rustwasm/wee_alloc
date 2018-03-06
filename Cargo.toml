@@ -2,5 +2,6 @@
 members = ["./wee_alloc", "./test", "./example"]
 
 [profile.release]
+lto = true
 debug = true
 opt-level = "z"
