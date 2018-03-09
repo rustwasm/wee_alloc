@@ -1,5 +1,5 @@
 [workspace]
-members = ["./wee_alloc", "./test", "./example"]
+members = ["./wee_alloc", "./test", "./example", "./intrusive_splay_tree"]
 
 [profile.release]
 lto = true
