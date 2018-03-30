@@ -6,6 +6,7 @@ version = "0.1.0"
 [dependencies]
 rand = "0.4.2"
 quickcheck = "0.6.0"
+histo = "0.1.0"
 
 [dependencies.wee_alloc]
 path = "../wee_alloc"

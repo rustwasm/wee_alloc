@@ -16,6 +16,10 @@ cargo build --release
 cargo build --release --features size_classes
 cd -
 
+cd ./trace-malloc-free
+cargo build
+cd -
+
 cd ./example
 
 cargo build --release                         --target wasm32-unknown-unknown
