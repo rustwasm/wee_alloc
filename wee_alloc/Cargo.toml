@@ -25,6 +25,7 @@ use_std_for_test_debugging = []
 
 [dependencies]
 memory_units = "0.4.0"
+cfg-if = "0.1.2"
 
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
 default-features = false

@@ -212,54 +212,45 @@ for hacking!
 
  */
 
-// TODO:
-// - new crate to expose posix `malloc` and `free`
-// - test bootstrapping rustc with this as global allocator
-// - graphviz visualization of free lists, statistics on fregmentation,
-//   etc. behind a feature
-
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
 #![feature(alloc, allocator_api, core_intrinsics, global_allocator)]
 #![cfg_attr(target_arch = "wasm32", feature(link_llvm_intrinsics))]
 
+#[macro_use]
+extern crate cfg_if;
+
 extern crate alloc;
+
 #[cfg(feature = "use_std_for_test_debugging")]
 extern crate core;
-
-#[cfg(all(unix, not(target_arch = "wasm32")))]
-extern crate libc;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-extern crate mmap_alloc;
-#[cfg(windows)]
-extern crate winapi;
 
 extern crate memory_units;
 
 #[macro_use]
 mod extra_assert;
 
-mod const_init;
-
-#[cfg(all(not(unix), not(windows), not(target_arch = "wasm32")))]
-compile_error! {
-    "There is no `wee_alloc` implementation for this target; want to send a pull request? :)"
+cfg_if! {
+    if #[cfg(target_arch = "wasm32")] {
+        mod imp_wasm32;
+        use imp_wasm32 as imp;
+    } else if #[cfg(unix)] {
+        extern crate libc;
+        extern crate mmap_alloc;
+        mod imp_unix;
+        use imp_unix as imp;
+    } else if #[cfg(windows)] {
+        extern crate winapi;
+        mod imp_windows;
+        use imp_windows as imp;
+    } else {
+        compile_error! {
+            "There is no `wee_alloc` implementation for this target; want to send a pull request? :)"
+        }
+    }
 }
 
-#[cfg(target_arch = "wasm32")]
-mod imp_wasm32;
-#[cfg(target_arch = "wasm32")]
-use imp_wasm32 as imp;
-
-#[cfg(all(unix, not(target_arch = "wasm32")))]
-mod imp_unix;
-#[cfg(all(unix, not(target_arch = "wasm32")))]
-use imp_unix as imp;
-
-#[cfg(windows)]
-mod imp_windows;
-#[cfg(windows)]
-use imp_windows as imp;
+mod const_init;
 
 #[cfg(feature = "size_classes")]
 mod size_classes;
