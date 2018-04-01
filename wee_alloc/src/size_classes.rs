@@ -1,24 +1,24 @@
 use super::{alloc_with_refill, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
 use const_init::ConstInit;
+use core::cell::Cell;
 use core::cmp;
-use core::ptr;
 use imp;
 use memory_units::{size_of, Bytes, RoundUpTo, Words};
 
 /// An array of free lists specialized for allocations of sizes
 /// `1..Self::NUM_SIZE_CLASSES + 1` words.
-pub(crate) struct SizeClasses(
-    pub(crate) [imp::Exclusive<*mut FreeCell>; SizeClasses::NUM_SIZE_CLASSES],
+pub(crate) struct SizeClasses<'a>(
+    pub(crate) [imp::Exclusive<*const FreeCell<'a>>; SizeClasses::NUM_SIZE_CLASSES],
 );
 
-impl ConstInit for SizeClasses {
-    const INIT: SizeClasses = SizeClasses(include!("size_classes_init.rs"));
+impl<'a> ConstInit for SizeClasses<'a> {
+    const INIT: SizeClasses<'a> = SizeClasses(include!("size_classes_init.rs"));
 }
 
-impl SizeClasses {
+impl<'a> SizeClasses<'a> {
     pub(crate) const NUM_SIZE_CLASSES: usize = 256;
 
-    pub(crate) fn get(&self, size: Words) -> Option<&imp::Exclusive<*mut FreeCell>> {
+    pub(crate) fn get(&self, size: Words) -> Option<&imp::Exclusive<*const FreeCell<'a>>> {
         extra_assert!(size.0 > 0);
         self.0.get(size.0 - 1)
     }
@@ -28,14 +28,19 @@ impl SizeClasses {
 // `LargeAllocPolicy`.
 const MIN_NEW_CELL_SIZE: Bytes = Bytes(8192);
 
-pub(crate) struct SizeClassAllocPolicy<'a>(pub(crate) &'a imp::Exclusive<*mut FreeCell>);
+pub(crate) struct SizeClassAllocPolicy<'a, 'b>(pub(crate) &'b imp::Exclusive<*const FreeCell<'a>>)
+where
+    'a: 'b;
 
-impl<'a> AllocPolicy for SizeClassAllocPolicy<'a> {
+impl<'a, 'b> AllocPolicy<'a> for SizeClassAllocPolicy<'a, 'b>
+where
+    'a: 'b,
+{
     unsafe fn new_cell_for_free_list(
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*mut FreeCell, ()> {
+    ) -> Result<*const FreeCell<'a>, ()> {
         extra_assert!(align.0 > 0);
         extra_assert!(align.0.is_power_of_two());
         extra_assert!(align <= size_of::<usize>());
@@ -49,22 +54,29 @@ impl<'a> AllocPolicy for SizeClassAllocPolicy<'a> {
         );
 
         let new_cell = self.0.with_exclusive_access(|head| {
-            alloc_with_refill(new_cell_size, size_of::<usize>(), head, &LargeAllocPolicy)
+            let head_cell = Cell::new(*head);
+            let result = alloc_with_refill(
+                new_cell_size,
+                size_of::<usize>(),
+                &head_cell,
+                &LargeAllocPolicy,
+            );
+            *head = head_cell.get();
+            result
         })?;
 
         let new_cell_size: Bytes = new_cell_size.into();
-        let next_cell = new_cell.offset(new_cell_size.0 as isize);
-        let next_cell = next_cell as usize | CellHeader::NEXT_CELL_IS_INVALID;
-        extra_assert!(next_cell != 0);
-        let next_cell = ptr::NonNull::new_unchecked(next_cell as *mut CellHeader);
 
-        Ok(FreeCell::from_uninitialized(
+        let free_cell = FreeCell::from_uninitialized(
             new_cell,
-            next_cell,
-            None,
+            new_cell_size - size_of::<CellHeader>(),
             None,
             self as &AllocPolicy,
-        ))
+        );
+        let next_cell = new_cell.offset(new_cell_size.0 as isize);
+        (*free_cell).header.neighbors.set_next(next_cell as *const CellHeader);
+        CellHeader::set_next_cell_is_invalid(&(*free_cell).header.neighbors);
+        Ok(free_cell)
     }
 
     fn min_cell_size(&self, alloc_size: Words) -> Words {

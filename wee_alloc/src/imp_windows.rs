@@ -10,9 +10,9 @@ use winapi::um::synchapi::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 use winapi::um::winbase::{WAIT_OBJECT_0, INFINITE};
 use winapi::um::winnt::{HANDLE, MEM_COMMIT, PAGE_READWRITE};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<*const u8, ()> {
     let bytes: Bytes = pages.into();
-    let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) as *mut u8 };
+    let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) as *const u8 };
 
     if !ptr.is_null() {
         Ok(ptr)
@@ -21,26 +21,17 @@ pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
     }
 }
 
-// Cache line size on an i7. Good enough.
-const CACHE_LINE_SIZE: usize = 64;
-
+// Align to the cache line size on an i7 to avoid false sharing.
+#[repr(align(64))]
 pub(crate) struct Exclusive<T> {
     lock: UnsafeCell<HANDLE>,
     inner: UnsafeCell<T>,
-    // Because we can't do `repr(align = "64")` yet, we have to pad a full cache
-    // line to ensure that there is no false sharing.
-    _no_false_sharing: [u8; CACHE_LINE_SIZE],
 }
 
 impl<T: ConstInit> ConstInit for Exclusive<T> {
     const INIT: Self = Exclusive {
         lock: UnsafeCell::new(NULL),
         inner: UnsafeCell::new(T::INIT),
-        _no_false_sharing: [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-        ],
     };
 }
 

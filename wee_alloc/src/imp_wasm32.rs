@@ -8,7 +8,7 @@ extern "C" {
     fn grow_memory(pages: usize) -> i32;
 }
 
-pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<*mut u8, ()> {
+pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<*const u8, ()> {
     let ptr = grow_memory(n.0);
     if -1 != ptr {
         let ptr = (ptr as usize * PAGE_SIZE.0) as _;

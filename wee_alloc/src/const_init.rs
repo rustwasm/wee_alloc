@@ -4,6 +4,6 @@ pub(crate) trait ConstInit {
     const INIT: Self;
 }
 
-impl<T> ConstInit for *mut T {
+impl<T> ConstInit for *const T {
     const INIT: Self = 0 as *mut _;
 }
