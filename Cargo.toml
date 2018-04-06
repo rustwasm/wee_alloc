@@ -1,5 +1,5 @@
 [workspace]
-members = ["./wee_alloc", "./test", "./example"]
+members = ["./wee_alloc", "./test", "./example", "./trace-malloc-free"]
 
 [profile.release]
 lto = true

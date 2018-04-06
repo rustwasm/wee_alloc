@@ -1,6 +1,7 @@
 #![feature(alloc, allocator_api)]
 
 extern crate alloc;
+extern crate histo;
 #[macro_use]
 extern crate quickcheck;
 extern crate rand;
@@ -8,10 +9,15 @@ extern crate wee_alloc;
 
 use alloc::heap::{Alloc, Layout};
 use quickcheck::{Arbitrary, Gen};
+use std::f64;
+use std::fs;
+use std::io::Read;
 use std::mem;
+use std::path::Path;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
-enum Operation {
+pub enum Operation {
     // Allocate this many bytes.
     Alloc(usize),
 
@@ -20,7 +26,7 @@ enum Operation {
     Free(usize),
 }
 
-use Operation::*;
+pub use Operation::*;
 
 impl Operation {
     #[inline]
@@ -65,8 +71,42 @@ impl Operation {
     }
 }
 
+impl FromStr for Operation {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, ()> {
+        if s.starts_with("Alloc(") && s.ends_with("),") {
+            let start = "Alloc(".len();
+            let end = s.len() - "),".len();
+            let n: usize = s[start..end].parse().map_err(|_| ())?;
+            return Ok(Alloc(n));
+        }
+
+        if s.starts_with("Free(") && s.ends_with("),") {
+            let start = "Free(".len();
+            let end = s.len() - "),".len();
+            let idx: usize = s[start..end].parse().map_err(|_| ())?;
+            return Ok(Free(idx));
+        }
+
+        Err(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Operations(Vec<Operation>);
+
+impl FromStr for Operations {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, ()> {
+        let mut ops = vec![];
+        for line in s.lines() {
+            ops.push(line.parse()?);
+        }
+        Ok(Operations(ops))
+    }
+}
 
 #[cfg(feature = "extra_assertions")]
 const NUM_OPERATIONS: usize = 2_000;
@@ -203,7 +243,7 @@ impl Arbitrary for Operations {
 }
 
 impl Operations {
-    pub fn run_single_threaded(self) {
+    pub fn run_single_threaded(&self) {
         self.run_with_allocator(&wee_alloc::WeeAlloc::INIT);
     }
 
@@ -223,9 +263,9 @@ impl Operations {
         handle3.join().unwrap();
     }
 
-    pub fn run_with_allocator<A: Alloc>(self, mut a: A) {
+    pub fn run_with_allocator<A: Alloc>(&self, mut a: A) {
         let mut allocs = vec![];
-        for op in self.0 {
+        for op in self.0.iter().cloned() {
             match op {
                 Alloc(n) => {
                     let layout = Layout::from_size_align(n, mem::size_of::<usize>()).unwrap();
@@ -246,19 +286,58 @@ impl Operations {
             }
         }
     }
+
+    const NUM_BUCKETS: u64 = 20;
+
+    pub fn size_histogram(&self) -> histo::Histogram {
+        let mut histogram = histo::Histogram::with_buckets(Self::NUM_BUCKETS);
+        for op in &self.0 {
+            if let Alloc(n) = *op {
+                let n = n as f64;
+                let n = n.log2().round();
+                histogram.add(n as u64);
+            }
+        }
+        histogram
+    }
+
+    pub fn lifetime_histogram(&self) -> histo::Histogram {
+        let mut histogram = histo::Histogram::with_buckets(Self::NUM_BUCKETS);
+        for (i, op) in self.0.iter().enumerate() {
+            if let Free(j) = *op {
+                if j < i {
+                    histogram.add((i - j) as u64);
+                }
+            }
+        }
+        histogram
+    }
+
+    pub fn read_trace(trace: &str) -> Self {
+        let trace = Path::new(trace);
+        let trace_dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/traces"));
+        let mut file = fs::File::open(trace_dir.join(trace)).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        contents.parse().unwrap()
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 macro_rules! run_quickchecks {
-    ( $name:ident ) => {
+    ($name:ident) => {
         #[test]
         fn $name() {
+            fn single_threaded(ops: Operations) {
+                ops.run_single_threaded();
+            }
+
             quickcheck::QuickCheck::new()
                 .tests(1)
-                .quickcheck(Operations::run_single_threaded as fn(Operations) -> ());
+                .quickcheck(single_threaded as fn(Operations) -> ());
         }
-    }
+    };
 }
 
 // Let the test harness run each of our single threaded quickchecks concurrently
@@ -295,69 +374,91 @@ quickcheck! {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+macro_rules! test_trace {
+    ($name:ident, $trace:expr) => {
+        #[test]
+        fn $name() {
+            let ops = Operations::read_trace($trace);
+            ops.run_single_threaded();
+        }
+    };
+}
+
+test_trace!(test_trace_cpp_demangle, "../traces/cpp-demangle.trace");
+test_trace!(test_trace_dogfood, "../traces/dogfood.trace");
+test_trace!(test_trace_ffmpeg, "../traces/ffmpeg.trace");
+test_trace!(test_trace_find, "../traces/find.trace");
+test_trace!(test_trace_gcc_hello, "../traces/gcc-hello.trace");
+test_trace!(test_trace_grep_random_data, "../traces/grep-random-data.trace");
+test_trace!(test_trace_grep_recursive, "../traces/grep-recursive.trace");
+test_trace!(test_trace_ls, "../traces/ls.trace");
+test_trace!(test_trace_source_map, "../traces/source-map.trace");
+
+////////////////////////////////////////////////////////////////////////////////
+
 #[test]
 fn regression_test_0() {
-    Operations::run_single_threaded(Operations(vec![Alloc(1)]));
+    Operations(vec![Alloc(1)]).run_single_threaded();
 }
 
 #[test]
 fn regression_test_1() {
-    Operations::run_single_threaded(Operations(vec![Alloc(1414), Free(0), Alloc(1414), Free(1)]));
+    Operations(vec![Alloc(1414), Free(0), Alloc(1414), Free(1)]).run_single_threaded();
 }
 
 #[test]
 fn regression_test_2() {
-    Operations::run_single_threaded(Operations(vec![
+    Operations(vec![
         Alloc(168),
         Free(0),
         Alloc(0),
         Alloc(168),
         Free(2),
-    ]))
+    ]).run_single_threaded();
 }
 
 #[test]
 fn regression_test_3() {
-    Operations::run_single_threaded(Operations(vec![Alloc(13672), Free(0), Alloc(1)]));
+    Operations(vec![Alloc(13672), Free(0), Alloc(1)]).run_single_threaded();
 }
 
 #[test]
 fn allocate_size_zero() {
     use std::iter;
-    Operations::run_single_threaded(Operations(
+    Operations(
         iter::repeat(Alloc(0))
             .take(1000)
             .chain((0..1000).map(|i| Free(i)))
             .collect(),
-    ));
+    ).run_single_threaded();
 }
 
 #[test]
 fn allocate_many_small() {
     use std::iter;
 
-    Operations::run_single_threaded(Operations(
+    Operations(
         iter::repeat(Alloc(16 * mem::size_of::<usize>()))
             .take(100)
             .chain((0..100).map(|i| Free(i)))
             .chain(iter::repeat(Alloc(256 * mem::size_of::<usize>())).take(100))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
-    ));
+    ).run_single_threaded();
 }
 
 #[test]
 fn allocate_many_large() {
     use std::iter;
 
-    Operations::run_single_threaded(Operations(
+    Operations(
         iter::repeat(Alloc(257 * mem::size_of::<usize>()))
             .take(100)
             .chain((0..100).map(|i| Free(i)))
             .chain(iter::repeat(Alloc(1024 * mem::size_of::<usize>())).take(100))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
-    ));
+    ).run_single_threaded();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
