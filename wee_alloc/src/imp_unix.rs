@@ -1,11 +1,13 @@
 use alloc::allocator::{Alloc, Layout};
 use const_init::ConstInit;
+use core::alloc::{AllocErr, Opaque};
 use core::cell::UnsafeCell;
+use core::ptr::NonNull;
 use libc;
 use mmap_alloc::MapAllocBuilder;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();
         let layout = Layout::from_size_align_unchecked(bytes.0, 1);
@@ -13,7 +15,6 @@ pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
         MapAllocBuilder::default()
             .build()
             .alloc(layout)
-            .map_err(|_| ())
     }
 }
 

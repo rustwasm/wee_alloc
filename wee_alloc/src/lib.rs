@@ -256,13 +256,13 @@ mod neighbors;
 #[cfg(feature = "size_classes")]
 mod size_classes;
 
-use alloc::heap::{Alloc, AllocErr, Layout};
 use const_init::ConstInit;
+use core::alloc::{Alloc, AllocErr, GlobalAlloc, Layout, Opaque};
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;
 use core::mem;
-use core::ptr;
+use core::ptr::{self, NonNull};
 use memory_units::{size_of, Bytes, Pages, RoundUpTo, Words};
 use neighbors::Neighbors;
 
@@ -508,19 +508,18 @@ impl<'a> FreeCell<'a> {
     }
 
     unsafe fn from_uninitialized(
-        raw: *const u8,
+        raw: NonNull<Opaque>,
         size: Bytes,
         next_free: Option<*const FreeCell<'a>>,
         policy: &AllocPolicy<'a>,
     ) -> *const FreeCell<'a> {
-        extra_assert!(!raw.is_null());
-        assert_is_word_aligned(raw);
+        assert_is_word_aligned(raw.as_ptr() as *mut u8);
 
         let next_free = next_free.unwrap_or(ptr::null_mut());
 
-        let raw = raw as *const FreeCell;
+        let raw = raw.as_ptr() as *mut FreeCell;
         ptr::write(
-            raw as *mut FreeCell,
+            raw,
             FreeCell {
                 header: CellHeader::default(),
                 next_free_raw: Cell::new(next_free),
@@ -575,7 +574,7 @@ impl<'a> FreeCell<'a> {
             let split_cell_head = split_and_aligned - size_of::<CellHeader>().0;
             let split_cell = unsafe {
                 &*FreeCell::from_uninitialized(
-                    split_cell_head as *const u8,
+                    unchecked_unwrap(NonNull::new(split_cell_head as *mut Opaque)),
                     Bytes(next - split_cell_head) - size_of::<CellHeader>(),
                     None,
                     policy,
@@ -781,7 +780,7 @@ trait AllocPolicy<'a> {
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, ()>;
+    ) -> Result<*const FreeCell<'a>, AllocErr>;
 
     fn min_cell_size(&self, alloc_size: Words) -> Words;
 
@@ -807,7 +806,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, ()> {
+    ) -> Result<*const FreeCell<'a>, AllocErr> {
         // To assure that an allocation will always succeed after refilling the
         // free list with this new cell, make sure that we allocate enough to
         // fulfill the requested alignment, and still have the minimum cell size
@@ -828,7 +827,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
             self as &AllocPolicy<'a>,
         );
 
-        let next_cell = new_pages.offset(allocated_size.0 as isize);
+        let next_cell = (new_pages.as_ptr() as *const u8).offset(allocated_size.0 as isize);
         free_cell
             .header
             .neighbors
@@ -872,7 +871,7 @@ unsafe fn walk_free_list<'a, F, T>(
     head: &Cell<*const FreeCell<'a>>,
     policy: &AllocPolicy<'a>,
     mut f: F,
-) -> Result<T, ()>
+) -> Result<T, AllocErr>
 where
     F: FnMut(&Cell<*const FreeCell<'a>>, &FreeCell<'a>) -> Option<T>,
 {
@@ -885,7 +884,7 @@ where
         assert_local_cell_invariants(&(*current_free).header);
 
         if current_free.is_null() {
-            return Err(());
+            return Err(AllocErr);
         }
 
         let current_free = Cell::new(current_free);
@@ -940,7 +939,7 @@ unsafe fn alloc_first_fit<'a>(
     align: Bytes,
     head: &Cell<*const FreeCell<'a>>,
     policy: &AllocPolicy<'a>,
-) -> Result<*const u8, ()> {
+) -> Result<NonNull<Opaque>, AllocErr> {
     extra_assert!(size.0 > 0);
 
     walk_free_list(head, policy, |previous, current| {
@@ -948,7 +947,7 @@ unsafe fn alloc_first_fit<'a>(
 
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
-            return Some(allocated.data());
+            return Some(unchecked_unwrap(NonNull::new(allocated.data() as *mut Opaque)));
         }
 
         None
@@ -960,7 +959,7 @@ unsafe fn alloc_with_refill<'a, 'b>(
     align: Bytes,
     head: &'b Cell<*const FreeCell<'a>>,
     policy: &AllocPolicy<'a>,
-) -> Result<*const u8, ()> {
+) -> Result<NonNull<Opaque>, AllocErr> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
     }
@@ -1055,8 +1054,11 @@ impl<'a> WeeAlloc<'a> {
     }
 }
 
-unsafe impl<'a> Alloc for &'a WeeAlloc<'a> {
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
+unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
+where
+    'a: 'b
+{
+    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<Opaque>, AllocErr> {
         let size = Bytes(layout.size());
         let align = if layout.align() == 0 {
             Bytes(1)
@@ -1067,7 +1069,8 @@ unsafe impl<'a> Alloc for &'a WeeAlloc<'a> {
         if size.0 == 0 {
             // Ensure that our made up pointer is properly aligned by using the
             // alignment as the pointer.
-            return Ok(align.0 as *mut u8);
+            extra_assert!(align.0 > 0);
+            return Ok(NonNull::new_unchecked(align.0 as *mut Opaque));
         }
 
         let size: Words = size.round_up_to();
@@ -1075,14 +1078,12 @@ unsafe impl<'a> Alloc for &'a WeeAlloc<'a> {
         self.with_free_list_and_policy_for_size(size, align, |head, policy| {
             assert_is_valid_free_list(head.get(), policy);
             alloc_with_refill(size, align, head, policy)
-                .map(|p| p as *mut u8)
-                .map_err(|()| AllocErr::Exhausted { request: layout })
         })
     }
 
-    unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<Opaque>, layout: Layout) {
         let size = Bytes(layout.size());
-        if size.0 == 0 || ptr.is_null() {
+        if size.0 == 0 {
             return;
         }
 
@@ -1090,7 +1091,7 @@ unsafe impl<'a> Alloc for &'a WeeAlloc<'a> {
         let align = Bytes(layout.align());
 
         self.with_free_list_and_policy_for_size(size, align, |head, policy| {
-            let cell = (ptr as *const CellHeader<'a>).offset(-1);
+            let cell = (ptr.as_ptr() as *mut CellHeader<'a> as *const CellHeader<'a>).offset(-1);
             let cell = &*cell;
 
             extra_assert!(cell.size() >= size.into());
@@ -1166,5 +1167,22 @@ unsafe impl<'a> Alloc for &'a WeeAlloc<'a> {
             // free list.
             let _head = free.insert_into_free_list(head, policy);
         });
+    }
+}
+
+unsafe impl GlobalAlloc for WeeAlloc<'static> {
+    unsafe fn alloc(&self, layout: Layout) -> *mut Opaque {
+        let mut me = self;
+        match Alloc::alloc(&mut me, layout) {
+            Ok(ptr) => ptr.as_ptr(),
+            Err(AllocErr) => 0 as *mut Opaque,
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut Opaque, layout: Layout) {
+        if let Some(ptr) = NonNull::new(ptr) {
+            let mut me = self;
+            Alloc::dealloc(&mut me, ptr, layout);
+        }
     }
 }

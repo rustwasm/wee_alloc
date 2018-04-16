@@ -1,5 +1,7 @@
 use const_init::ConstInit;
+use core::alloc::{AllocErr, Opaque};
 use core::cell::UnsafeCell;
+use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
 
 use winapi::shared::minwindef::FALSE;
@@ -10,7 +12,7 @@ use winapi::um::synchapi::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 use winapi::um::winbase::{WAIT_OBJECT_0, INFINITE};
 use winapi::um::winnt::{HANDLE, MEM_COMMIT, PAGE_READWRITE};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<*const u8, ()> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
     let bytes: Bytes = pages.into();
     let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) as *const u8 };
 

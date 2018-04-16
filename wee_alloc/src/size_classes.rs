@@ -1,4 +1,5 @@
 use super::{alloc_with_refill, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
+use core::alloc::AllocErr;
 use const_init::ConstInit;
 use core::cell::Cell;
 use core::cmp;
@@ -40,7 +41,7 @@ where
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, ()> {
+    ) -> Result<*const FreeCell<'a>, AllocErr> {
         extra_assert!(align.0 > 0);
         extra_assert!(align.0.is_power_of_two());
         extra_assert!(align <= size_of::<usize>());
@@ -73,7 +74,7 @@ where
             None,
             self as &AllocPolicy,
         );
-        let next_cell = new_cell.offset(new_cell_size.0 as isize);
+        let next_cell = (new_cell.as_ptr() as *const u8).offset(new_cell_size.0 as isize);
         (*free_cell).header.neighbors.set_next(next_cell as *const CellHeader);
         CellHeader::set_next_cell_is_invalid(&(*free_cell).header.neighbors);
         Ok(free_cell)

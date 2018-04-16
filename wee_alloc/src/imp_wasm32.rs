@@ -1,6 +1,8 @@
-use super::{assert_is_word_aligned, PAGE_SIZE};
+use super::{assert_is_word_aligned, PAGE_SIZE, unchecked_unwrap};
 use const_init::ConstInit;
+use core::alloc::{AllocErr, Opaque};
 use core::cell::UnsafeCell;
+use core::ptr::NonNull;
 use memory_units::Pages;
 
 extern "C" {
@@ -8,14 +10,14 @@ extern "C" {
     fn grow_memory(pages: usize) -> i32;
 }
 
-pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<*const u8, ()> {
+pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<Opaque>, AllocErr> {
     let ptr = grow_memory(n.0);
     if -1 != ptr {
-        let ptr = (ptr as usize * PAGE_SIZE.0) as _;
-        assert_is_word_aligned(ptr);
-        Ok(ptr)
+        let ptr = (ptr as usize * PAGE_SIZE.0) as *mut Opaque;
+        assert_is_word_aligned(ptr as *mut u8);
+        Ok(unchecked_unwrap(NonNull::new(ptr)))
     } else {
-        Err(())
+        Err(AllocErr)
     }
 }
 

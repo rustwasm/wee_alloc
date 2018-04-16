@@ -34,6 +34,8 @@ version = "0.2"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies.mmap-alloc]
 version = "0.2"
+git = "https://github.com/fitzgen/allocators-rs"
+branch = "new-alloc-api"
 
 [target.'cfg(target_os = "windows")'.dependencies.winapi]
 version = "0.3"

@@ -473,13 +473,19 @@ fn smoke() {
     unsafe {
         let layout = Layout::new::<u8>();
         let ptr = a.alloc(layout.clone()).unwrap();
-        *ptr = 9;
-        assert_eq!(*ptr, 9);
+        {
+            let ptr = ptr.as_ptr() as *mut u8;
+            *ptr = 9;
+            assert_eq!(*ptr, 9);
+        }
         a.dealloc(ptr, layout.clone());
 
         let ptr = a.alloc(layout.clone()).unwrap();
-        *ptr = 10;
-        assert_eq!(*ptr, 10);
+        {
+            let ptr = ptr.as_ptr() as *mut u8;
+            *ptr = 10;
+            assert_eq!(*ptr, 10);
+        }
         a.dealloc(ptr, layout.clone());
     }
 }
@@ -519,11 +525,11 @@ fn stress() {
                 };
                 let mut tmp = Vec::new();
                 for i in 0..cmp::min(old.size(), new.size()) {
-                    tmp.push(*ptr.offset(i as isize));
+                    tmp.push(*(ptr.as_ptr() as *mut u8).offset(i as isize));
                 }
-                let ptr = a.realloc(ptr, old, new.clone()).unwrap();
+                let ptr = a.realloc(ptr, old, new.size()).unwrap();
                 for (i, byte) in tmp.iter().enumerate() {
-                    assert_eq!(*byte, *ptr.offset(i as isize));
+                    assert_eq!(*byte, *(ptr.as_ptr() as *mut u8).offset(i as isize));
                 }
                 ptrs.push((ptr, new));
             }
@@ -545,9 +551,9 @@ fn stress() {
             };
             for i in 0..layout.size() {
                 if zero {
-                    assert_eq!(*ptr.offset(i as isize), 0);
+                    assert_eq!(*(ptr.as_ptr() as *mut u8).offset(i as isize), 0);
                 }
-                *ptr.offset(i as isize) = 0xce;
+                *(ptr.as_ptr() as *mut u8).offset(i as isize) = 0xce;
             }
             ptrs.push((ptr, layout));
         }
