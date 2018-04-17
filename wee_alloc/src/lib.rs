@@ -3,8 +3,8 @@
 [![](https://docs.rs/wee_alloc/badge.svg)](https://docs.rs/wee_alloc/)
 [![](https://img.shields.io/crates/v/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
 [![](https://img.shields.io/crates/d/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
-[![Travis CI Build Status](https://travis-ci.org/fitzgen/wee_alloc.svg?branch=master)](https://travis-ci.org/fitzgen/wee_alloc)
-[![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/bqh8elm9wy0k5x2r/branch/master?svg=true)](https://ci.appveyor.com/project/fitzgen/wee-alloc/branch/master)
+[![Travis CI Build Status](https://travis-ci.org/rustwasm/wee_alloc.svg?branch=master)](https://travis-ci.org/rustwasm/wee_alloc)
+[![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/bqh8elm9wy0k5x2r/branch/master?svg=true)](https://ci.appveyor.com/project/rustwasm/wee-alloc/branch/master)
 
 `wee_alloc`: The **W**asm-**E**nabled, **E**lfin Allocator.
 
@@ -207,7 +207,7 @@ Licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/en-US/MP
 ## Contribution
 
 See
-[CONTRIBUTING.md](https://github.com/fitzgen/wee_alloc/blob/master/CONTRIBUTING.md)
+[CONTRIBUTING.md](https://github.com/rustwasm/wee_alloc/blob/master/CONTRIBUTING.md)
 for hacking!
 
  */
