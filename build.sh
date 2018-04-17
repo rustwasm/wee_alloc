@@ -44,7 +44,7 @@ if which wasm-opt; then
              -o ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.opt.wasm
 fi
 
-wc -c ../target/wasm32-unknown-unknown/release/*.gc.opt.wasm
+wc -c ../target/wasm32-unknown-unknown/release/*.wasm
 
 set +x
 
@@ -58,7 +58,6 @@ function dis_does_not_contain {
         echo "wee_alloc should never pull in the panicking infrastructure"
         exit 1
     fi
-
 }
 
 function no_panic {

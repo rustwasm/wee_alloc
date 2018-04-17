@@ -1,11 +1,13 @@
 use alloc::allocator::{Alloc, Layout};
 use const_init::ConstInit;
+use core::alloc::{AllocErr, Opaque};
 use core::cell::UnsafeCell;
+use core::ptr::NonNull;
 use libc;
 use mmap_alloc::MapAllocBuilder;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();
         let layout = Layout::from_size_align_unchecked(bytes.0, 1);
@@ -13,30 +15,20 @@ pub(crate) fn alloc_pages(pages: Pages) -> Result<*mut u8, ()> {
         MapAllocBuilder::default()
             .build()
             .alloc(layout)
-            .map_err(|_| ())
     }
 }
 
-// Cache line size on an i7. Good enough.
-const CACHE_LINE_SIZE: usize = 64;
-
+// Align to the cache line size on an i7 to prevent false sharing.
+#[repr(align(64))]
 pub(crate) struct Exclusive<T> {
     lock: UnsafeCell<libc::pthread_mutex_t>,
     inner: UnsafeCell<T>,
-    // Because we can't do `repr(align = "64")` yet, we have to pad a full cache
-    // line to ensure that there is no false sharing.
-    _no_false_sharing: [u8; CACHE_LINE_SIZE],
 }
 
 impl<T: ConstInit> ConstInit for Exclusive<T> {
     const INIT: Self = Exclusive {
         lock: UnsafeCell::new(libc::PTHREAD_MUTEX_INITIALIZER),
         inner: UnsafeCell::new(T::INIT),
-        _no_false_sharing: [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-        ],
     };
 }
 
