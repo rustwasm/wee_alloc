@@ -14,13 +14,8 @@ use winapi::um::winnt::{HANDLE, MEM_COMMIT, PAGE_READWRITE};
 
 pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
     let bytes: Bytes = pages.into();
-    let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) as *const u8 };
-
-    if !ptr.is_null() {
-        Ok(ptr)
-    } else {
-        Err(())
-    }
+    let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) };
+    NonNull::new(ptr as *mut Opaque).ok_or(AllocErr)
 }
 
 // Align to the cache line size on an i7 to avoid false sharing.
