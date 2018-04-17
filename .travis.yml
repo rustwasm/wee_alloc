@@ -12,6 +12,7 @@ env:
 
 before_script:
   - rustup target add wasm32-unknown-unknown
+  - rustup target add i686-pc-windows-gnu
   - which wasm-gc || cargo install --git https://github.com/alexcrichton/wasm-gc
   - which cargo-readme || cargo install cargo-readme
 
