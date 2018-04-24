@@ -1,20 +1,26 @@
-use alloc::allocator::{Alloc, Layout};
 use const_init::ConstInit;
 use core::alloc::{AllocErr, Opaque};
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use libc;
-use mmap_alloc::MapAllocBuilder;
 use memory_units::{Bytes, Pages};
 
 pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();
-        let layout = Layout::from_size_align_unchecked(bytes.0, 1);
-
-        MapAllocBuilder::default()
-            .build()
-            .alloc(layout)
+        let addr = libc::mmap(
+            0 as *mut _,
+            bytes.0,
+            libc::PROT_WRITE | libc::PROT_READ,
+            libc::MAP_ANON | libc::MAP_PRIVATE,
+            -1,
+            0,
+        );
+        if addr == libc::MAP_FAILED {
+            Err(AllocErr)
+        } else {
+            NonNull::new(addr as *mut Opaque).ok_or(AllocErr)
+        }
     }
 }
 

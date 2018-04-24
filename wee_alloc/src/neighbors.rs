@@ -59,6 +59,7 @@ where
 
     #[test]
     fn can_use_low_bits() {
+        use core::mem;
         assert!(
             mem::align_of::<*const u8>() >= 0b100,
             "we rely on being able to stick tags into the lowest two bits"
