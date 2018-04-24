@@ -237,7 +237,6 @@ cfg_if! {
         use imp_wasm32 as imp;
     } else if #[cfg(unix)] {
         extern crate libc;
-        extern crate mmap_alloc;
         mod imp_unix;
         use imp_unix as imp;
     } else if #[cfg(windows)] {
