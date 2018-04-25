@@ -1,3 +1,11 @@
+### 0.3.0
+
+Released 2018/04/24.
+
+* Almost 10x faster replaying Real World(tm) allocation traces.
+
+* Updated for the latest allocator trait changes from the Rust standard library.
+
 ### 0.2.0
 
 Released 2018/03/06.
