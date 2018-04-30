@@ -1,6 +1,6 @@
 [package]
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
-categories = ["memory-management", "web-programming", "no-std", "wasm"]
+categories = ["memory-management", "web-programming", "no-std", "wasm", "embedded"]
 description = "wee_alloc: The Wasm-Enabled, Elfin Allocator"
 license = "MPL-2.0"
 name = "wee_alloc"
@@ -20,10 +20,11 @@ extra_assertions = []
 # Enable size classes for amortized *O(1)* small allocations.
 size_classes = []
 
+# Enable fixed-sized, OS-independent backing memory implementation
+static_array_backend = []
+
 # This is for internal use only.
 use_std_for_test_debugging = []
-
-static_array_backend = []
 
 [dependencies]
 memory_units = "0.4.0"
