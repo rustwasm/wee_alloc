@@ -1,6 +1,11 @@
 [package]
-authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
-categories = ["memory-management", "web-programming", "no-std", "wasm"]
+authors = [
+  "Nick Fitzgerald <fitzgen@gmail.com>",
+  "Sergey Pepyakin <s.pepyakin@gmail.com>",
+  "Matt Howell <mjhowell@gmail.com>",
+  "Zack Pierce <zachary.pierce@gmail.com>",
+]
+categories = ["memory-management", "web-programming", "no-std", "wasm", "embedded"]
 description = "wee_alloc: The Wasm-Enabled, Elfin Allocator"
 license = "MPL-2.0"
 name = "wee_alloc"
@@ -20,6 +25,9 @@ extra_assertions = []
 # Enable size classes for amortized *O(1)* small allocations.
 size_classes = []
 
+# Enable fixed-sized, OS-independent backing memory implementation
+static_array_backend = []
+
 # This is for internal use only.
 use_std_for_test_debugging = []
 
@@ -27,6 +35,11 @@ use_std_for_test_debugging = []
 memory_units = "0.4.0"
 cfg-if = "0.1.2"
 unreachable = "1.0.0"
+
+[dependencies.spin]
+version = "0.4"
+default-features = false
+features = ["const_fn"]
 
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
 default-features = false

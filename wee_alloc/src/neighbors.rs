@@ -185,16 +185,12 @@ where
 
     #[inline]
     pub fn next(&self) -> Option<&'a T> {
-        unsafe {
-            T::next_checked(self, self.next_unchecked())
-        }
+        unsafe { T::next_checked(self, self.next_unchecked()) }
     }
 
     #[inline]
     pub fn prev(&self) -> Option<&'a T> {
-        unsafe {
-            T::prev_checked(self, self.prev_unchecked())
-        }
+        unsafe { T::prev_checked(self, self.prev_unchecked()) }
     }
 }
 

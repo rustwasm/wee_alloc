@@ -7,6 +7,7 @@ version = "0.1.0"
 rand = "0.4.2"
 quickcheck = "0.6.0"
 histo = "0.1.0"
+cfg-if = "0.1.2"
 
 [dependencies.wee_alloc]
 path = "../wee_alloc"
@@ -16,3 +17,4 @@ features = ["use_std_for_test_debugging"]
 [features]
 size_classes = ["wee_alloc/size_classes"]
 extra_assertions = ["wee_alloc/extra_assertions"]
+static_array_backend = ["wee_alloc/static_array_backend"]

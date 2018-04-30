@@ -50,7 +50,7 @@ impl<T> Exclusive<T> {
     #[inline]
     pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
     where
-        F: FnOnce(&'a mut T) -> U,
+        for<'x> F: FnOnce(&'x mut T) -> U,
     {
         let code = libc::pthread_mutex_lock(&mut *self.lock.get());
         extra_assert_eq!(code, 0, "pthread_mutex_lock should run OK");

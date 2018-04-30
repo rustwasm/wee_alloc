@@ -110,6 +110,11 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   runtime overhead. It is useful when debugging a use-after-free or `wee_alloc`
   itself.
 
+- **static_array_backend**: Force the use of an OS-independent fixed-size (16 MB)
+  backing implementation. Suitable for deploying to non-WASM/Unix/Windows
+  `#![no_std]` environments, such as on embedded devices with esoteric or effectively
+  absent operating systems.
+
 ## Implementation Notes and Constraints
 
 - `wee_alloc` imposes two words of overhead on each allocation for maintaining
@@ -224,6 +229,8 @@ extern crate alloc;
 
 #[cfg(feature = "use_std_for_test_debugging")]
 extern crate core;
+#[cfg(feature = "static_array_backend")]
+extern crate spin;
 
 extern crate memory_units;
 extern crate unreachable;
@@ -232,7 +239,10 @@ extern crate unreachable;
 mod extra_assert;
 
 cfg_if! {
-    if #[cfg(target_arch = "wasm32")] {
+    if #[cfg(feature = "static_array_backend")] {
+        mod imp_static_array;
+        use imp_static_array as imp;
+    } else if #[cfg(target_arch = "wasm32")] {
         mod imp_wasm32;
         use imp_wasm32 as imp;
     } else if #[cfg(unix)] {
@@ -946,7 +956,9 @@ unsafe fn alloc_first_fit<'a>(
 
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
-            return Some(unchecked_unwrap(NonNull::new(allocated.data() as *mut Opaque)));
+            return Some(unchecked_unwrap(
+                NonNull::new(allocated.data() as *mut Opaque),
+            ));
         }
 
         None
@@ -1055,7 +1067,7 @@ impl<'a> WeeAlloc<'a> {
 
 unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
 where
-    'a: 'b
+    'a: 'b,
 {
     unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<Opaque>, AllocErr> {
         let size = Bytes(layout.size());

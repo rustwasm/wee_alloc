@@ -4,6 +4,8 @@ extern crate alloc;
 extern crate histo;
 #[macro_use]
 extern crate quickcheck;
+#[macro_use]
+extern crate cfg_if;
 extern crate rand;
 extern crate wee_alloc;
 
@@ -257,10 +259,10 @@ impl Operations {
         let handle2 = thread::spawn(move || ops2.run_with_allocator(&WEE));
         let handle3 = thread::spawn(move || ops3.run_with_allocator(&WEE));
 
-        handle0.join().unwrap();
-        handle1.join().unwrap();
-        handle2.join().unwrap();
-        handle3.join().unwrap();
+        handle0.join().expect("Thread 0 Failed");
+        handle1.join().expect("Thread 1 Failed");
+        handle2.join().expect("Thread 2 Failed");
+        handle3.join().expect("Thread 3 Failed");
     }
 
     pub fn run_with_allocator<A: Alloc>(&self, mut a: A) {
@@ -344,12 +346,17 @@ macro_rules! run_quickchecks {
 // with each other.
 run_quickchecks!(quickchecks_0);
 run_quickchecks!(quickchecks_1);
-run_quickchecks!(quickchecks_2);
-run_quickchecks!(quickchecks_3);
-run_quickchecks!(quickchecks_4);
-run_quickchecks!(quickchecks_5);
-run_quickchecks!(quickchecks_6);
-run_quickchecks!(quickchecks_7);
+// Limit the extent of the stress testing for the limited-size static backend
+cfg_if! {
+    if #[cfg(not(feature = "static_array_backend"))] {
+        run_quickchecks!(quickchecks_2);
+        run_quickchecks!(quickchecks_3);
+        run_quickchecks!(quickchecks_4);
+        run_quickchecks!(quickchecks_5);
+        run_quickchecks!(quickchecks_6);
+        run_quickchecks!(quickchecks_7);
+    }
+}
 
 #[test]
 fn multi_threaded_quickchecks() {
@@ -389,7 +396,10 @@ test_trace!(test_trace_dogfood, "../traces/dogfood.trace");
 test_trace!(test_trace_ffmpeg, "../traces/ffmpeg.trace");
 test_trace!(test_trace_find, "../traces/find.trace");
 test_trace!(test_trace_gcc_hello, "../traces/gcc-hello.trace");
-test_trace!(test_trace_grep_random_data, "../traces/grep-random-data.trace");
+test_trace!(
+    test_trace_grep_random_data,
+    "../traces/grep-random-data.trace"
+);
 test_trace!(test_trace_grep_recursive, "../traces/grep-recursive.trace");
 test_trace!(test_trace_ls, "../traces/ls.trace");
 test_trace!(test_trace_source_map, "../traces/source-map.trace");
@@ -408,13 +418,7 @@ fn regression_test_1() {
 
 #[test]
 fn regression_test_2() {
-    Operations(vec![
-        Alloc(168),
-        Free(0),
-        Alloc(0),
-        Alloc(168),
-        Free(2),
-    ]).run_single_threaded();
+    Operations(vec![Alloc(168), Free(0), Alloc(0), Alloc(168), Free(2)]).run_single_threaded();
 }
 
 #[test]
@@ -472,7 +476,8 @@ fn smoke() {
     let mut a = &wee_alloc::WeeAlloc::INIT;
     unsafe {
         let layout = Layout::new::<u8>();
-        let ptr = a.alloc(layout.clone()).unwrap();
+        let ptr = a.alloc(layout.clone())
+            .expect("Should be able to alloc a fresh Layout clone");
         {
             let ptr = ptr.as_ptr() as *mut u8;
             *ptr = 9;
@@ -480,7 +485,8 @@ fn smoke() {
         }
         a.dealloc(ptr, layout.clone());
 
-        let ptr = a.alloc(layout.clone()).unwrap();
+        let ptr = a.alloc(layout.clone())
+            .expect("Should be able to alloc from a second clone");
         {
             let ptr = ptr.as_ptr() as *mut u8;
             *ptr = 10;
@@ -490,9 +496,10 @@ fn smoke() {
     }
 }
 
-// This takes too long with our extra assertion checks enabled.
+// This takes too long with our extra assertion checks enabled,
+// and the fixed-sized static array backend is too small.
 #[test]
-#[cfg(not(feature = "extra_assertions"))]
+#[cfg(not(any(feature = "extra_assertions", feature = "static_array_backend")))]
 fn stress() {
     use rand::Rng;
     use std::cmp;

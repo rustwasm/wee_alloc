@@ -1,28 +1,30 @@
-use super::{assert_is_word_aligned, PAGE_SIZE, unchecked_unwrap};
 use const_init::ConstInit;
 use core::alloc::{AllocErr, Opaque};
-use core::cell::UnsafeCell;
+#[cfg(feature = "extra_assertions")]
+use core::cell::Cell;
 use core::ptr::NonNull;
-use memory_units::Pages;
+use memory_units::{Bytes, Pages};
+use spin::Mutex;
 
-extern "C" {
-    #[link_name = "llvm.wasm.grow.memory.i32"]
-    fn grow_memory(pages: usize) -> i32;
-}
+const SCRATCH_LEN_BYTES: usize = 1024 * 1024 * 32;
+static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
+static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
-pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<Opaque>, AllocErr> {
-    let ptr = grow_memory(n.0);
-    if -1 != ptr {
-        let ptr = (ptr as usize * PAGE_SIZE.0) as *mut Opaque;
-        assert_is_word_aligned(ptr as *mut u8);
-        Ok(unchecked_unwrap(NonNull::new(ptr)))
+pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
+    let bytes: Bytes = pages.into();
+    let mut offset = OFFSET.lock();
+    let end = bytes.0 + *offset;
+    if end < SCRATCH_LEN_BYTES {
+        let ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8 as *mut Opaque;
+        *offset = end;
+        NonNull::new(ptr).ok_or_else(|| AllocErr)
     } else {
         Err(AllocErr)
     }
 }
 
 pub(crate) struct Exclusive<T> {
-    inner: UnsafeCell<T>,
+    inner: Mutex<T>,
 
     #[cfg(feature = "extra_assertions")]
     in_use: Cell<bool>,
@@ -30,7 +32,7 @@ pub(crate) struct Exclusive<T> {
 
 impl<T: ConstInit> ConstInit for Exclusive<T> {
     const INIT: Self = Exclusive {
-        inner: UnsafeCell::new(T::INIT),
+        inner: Mutex::new(T::INIT),
 
         #[cfg(feature = "extra_assertions")]
         in_use: Cell::new(false),
@@ -39,7 +41,7 @@ impl<T: ConstInit> ConstInit for Exclusive<T> {
 
 extra_only! {
     fn assert_not_in_use<T>(excl: &Exclusive<T>) {
-        assert!(!excl.in_use, "`Exclusive<T>` is not re-entrant");
+        assert!(!excl.in_use.get(), "`Exclusive<T>` is not re-entrant");
     }
 }
 
@@ -70,9 +72,10 @@ impl<T> Exclusive<T> {
     where
         for<'x> F: FnOnce(&'x mut T) -> U,
     {
+        let mut guard = self.inner.lock();
         assert_not_in_use(self);
         set_in_use(self);
-        let result = f(&mut *self.inner.get());
+        let result = f(&mut guard);
         set_not_in_use(self);
         result
     }
