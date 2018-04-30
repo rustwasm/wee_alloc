@@ -68,7 +68,7 @@ impl<T> Exclusive<T> {
     #[inline]
     pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
     where
-        F: FnOnce(&'a mut T) -> U,
+        for<'x> F: FnOnce(&'x mut T) -> U,
     {
         assert_not_in_use(self);
         set_in_use(self);

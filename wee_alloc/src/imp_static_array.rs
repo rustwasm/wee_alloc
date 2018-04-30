@@ -1,6 +1,5 @@
 use const_init::ConstInit;
 use core::alloc::{AllocErr, Opaque};
-use core::cell::UnsafeCell;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
 use core::ptr::NonNull;
@@ -25,8 +24,7 @@ pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocE
 }
 
 pub(crate) struct Exclusive<T> {
-    lock: Mutex<bool>,
-    inner: UnsafeCell<T>,
+    inner: Mutex<T>,
 
     #[cfg(feature = "extra_assertions")]
     in_use: Cell<bool>,
@@ -34,8 +32,7 @@ pub(crate) struct Exclusive<T> {
 
 impl<T: ConstInit> ConstInit for Exclusive<T> {
     const INIT: Self = Exclusive {
-        lock: Mutex::new(false),
-        inner: UnsafeCell::new(T::INIT),
+        inner: Mutex::new(T::INIT),
 
         #[cfg(feature = "extra_assertions")]
         in_use: Cell::new(false),
@@ -73,13 +70,12 @@ impl<T> Exclusive<T> {
     #[inline]
     pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
     where
-        F: FnOnce(&'a mut T) -> U,
+        for<'x> F: FnOnce(&'x mut T) -> U,
     {
-        let _l = self.lock.lock();
+        let mut guard = self.inner.lock();
         assert_not_in_use(self);
         set_in_use(self);
-        let data = &mut *self.inner.get();
-        let result = f(data);
+        let result = f(&mut guard);
         set_not_in_use(self);
         result
     }
