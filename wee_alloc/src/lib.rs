@@ -239,7 +239,7 @@ extern crate unreachable;
 mod extra_assert;
 
 cfg_if! {
-    if #[cfg(feature = "static_array_backend")]{
+    if #[cfg(feature = "static_array_backend")] {
         mod imp_static_array;
         use imp_static_array as imp;
     } else if #[cfg(target_arch = "wasm32")] {
