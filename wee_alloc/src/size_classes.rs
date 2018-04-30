@@ -1,6 +1,6 @@
 use super::{alloc_with_refill, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
-use core::alloc::AllocErr;
 use const_init::ConstInit;
+use core::alloc::AllocErr;
 use core::cell::Cell;
 use core::cmp;
 use imp;
@@ -75,7 +75,10 @@ where
             self as &AllocPolicy,
         );
         let next_cell = (new_cell.as_ptr() as *const u8).offset(new_cell_size.0 as isize);
-        (*free_cell).header.neighbors.set_next(next_cell as *const CellHeader);
+        (*free_cell)
+            .header
+            .neighbors
+            .set_next(next_cell as *const CellHeader);
         CellHeader::set_next_cell_is_invalid(&(*free_cell).header.neighbors);
         Ok(free_cell)
     }

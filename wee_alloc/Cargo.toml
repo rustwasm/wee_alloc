@@ -23,10 +23,17 @@ size_classes = []
 # This is for internal use only.
 use_std_for_test_debugging = []
 
+static_array_backend = []
+
 [dependencies]
 memory_units = "0.4.0"
 cfg-if = "0.1.2"
 unreachable = "1.0.0"
+
+[dependencies.spin]
+version = "0.4"
+default-features = false
+features = ["const_fn"]
 
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
 default-features = false
