@@ -1,5 +1,10 @@
 [package]
-authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+authors = [
+  "Nick Fitzgerald <fitzgen@gmail.com>",
+  "Sergey Pepyakin <s.pepyakin@gmail.com>",
+  "Matt Howell <mjhowell@gmail.com>",
+  "Zack Pierce <zachary.pierce@gmail.com>",
+]
 categories = ["memory-management", "web-programming", "no-std", "wasm", "embedded"]
 description = "wee_alloc: The Wasm-Enabled, Elfin Allocator"
 license = "MPL-2.0"
