@@ -25,6 +25,15 @@ extern "C" fn panic_fmt(_args: ::core::fmt::Arguments, _file: &'static str, _lin
     }
 }
 
+// Need to provide a tiny `oom` lang-item implementation for
+// `#![no_std]`.
+#[lang = "oom"]
+extern "C" fn oom() -> ! {
+    unsafe {
+        ::core::intrinsics::abort();
+    }
+}
+
 // Now, use the allocator via `alloc` types! ///////////////////////////////////
 
 use alloc::boxed::Box;
