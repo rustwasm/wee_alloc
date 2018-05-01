@@ -39,7 +39,12 @@ fn export_rerun_rules() {
     for entry_result in
         globwalk::glob("*.{toml,rs}").expect("Could not create a valid rust-file-finding glob")
     {
-        let file = entry_result.expect("Failed to read file information.");
-        println!("cargo:rerun-if-changed={}", file.path().display());
+        match entry_result {
+            Ok(file) => println!("cargo:rerun-if-changed={}", file.path().display()),
+            Err(e) => println!(
+                "Failed to read file information for rerun preparation: {:?}",
+                e
+            ),
+        }
     }
 }
