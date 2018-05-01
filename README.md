@@ -114,7 +114,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   implementation with a global maximum size fixed at compile time.
   Suitable for deploying to non-WASM/Unix/Windows `#![no_std]` environments,
   such as on embedded devices with esoteric or effectively absent operating
-  systems. The size defaults to 32 MB (33554432 bytes), and may be controlled
+  systems. The size defaults to 32 MiB (33554432 bytes), and may be controlled
   at build-time by supplying an optional environment variable to cargo,
   `WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES`
 

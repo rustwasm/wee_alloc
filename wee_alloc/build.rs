@@ -1,5 +1,3 @@
-extern crate globwalk;
-
 use std::env::{self, VarError};
 use std::fs::File;
 use std::io::Write;
@@ -23,7 +21,6 @@ fn create_static_array_backend_size_bytes_file() {
             VarError::NotUnicode(_) => { panic!("Could not interpret WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES as a string representing a 32 bit unsigned integer")},
         },
     };
-    println!("Setting the static_array_backend size to {} bytes", size);
     let mut f = File::create(&dest_path)
         .expect("Could not create file to store wee_alloc static_array_backend size metadata.");
     write!(f, "{}", size)
@@ -36,15 +33,13 @@ fn export_rerun_rules() {
         "cargo:rerun-if-env-changed={}",
         WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES
     );
-    for entry_result in
-        globwalk::glob("*.{toml,rs}").expect("Could not create a valid rust-file-finding glob")
+    for path in [
+        "./Cargo.toml",
+        "./build.rs",
+        "./src/lib.rs",
+        "./src/imp_static_array.rs",
+    ].iter()
     {
-        match entry_result {
-            Ok(file) => println!("cargo:rerun-if-changed={}", file.path().display()),
-            Err(e) => println!(
-                "Failed to read file information for rerun preparation: {:?}",
-                e
-            ),
-        }
+        println!("cargo:rerun-if-changed={}", path);
     }
 }
