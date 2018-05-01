@@ -110,10 +110,13 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   runtime overhead. It is useful when debugging a use-after-free or `wee_alloc`
   itself.
 
-- **static_array_backend**: Force the use of an OS-independent fixed-size (16 MB)
-  backing implementation. Suitable for deploying to non-WASM/Unix/Windows
-  `#![no_std]` environments, such as on embedded devices with esoteric or effectively
-  absent operating systems.
+- **static_array_backend**: Force the use of an OS-independent backing
+  implementation with a global maximum size fixed at compile time.
+  Suitable for deploying to non-WASM/Unix/Windows `#![no_std]` environments,
+  such as on embedded devices with esoteric or effectively absent operating
+  systems. The size defaults to 32 MB (33554432 bytes), and may be controlled
+  at build-time by supplying an optional environment variable to cargo,
+  `WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES`
 
 ### Implementation Notes and Constraints
 

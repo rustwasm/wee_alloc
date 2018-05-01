@@ -6,7 +6,7 @@ use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
 use spin::Mutex;
 
-const SCRATCH_LEN_BYTES: usize = 1024 * 1024 * 32;
+const SCRATCH_LEN_BYTES: usize = include!(concat!(env!("OUT_DIR"), "/wee_alloc_static_array_backend_size_bytes.txt"));
 static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
