@@ -133,11 +133,11 @@ Where we need help:
 * Issues labeled ["good first issue"][gfi] are issues where fixing them would be
   a great introduction to the code base.
 
-[help-wanted]: https://github.com/fitzgen/wee_alloc/labels/help%20wanted
+[help-wanted]: https://github.com/rustwasm/wee_alloc/labels/help%20wanted
 
-[mentored]: https://github.com/fitzgen/wee_alloc/labels/mentored
+[mentored]: https://github.com/rustwasm/wee_alloc/labels/mentored
 
-[gfi]: https://github.com/fitzgen/wee_alloc/labels/good%20first%20issue
+[gfi]: https://github.com/rustwasm/wee_alloc/labels/good%20first%20issue
 
 ## Team
 
@@ -154,4 +154,4 @@ word.
 **We need more team members!**
 [Drop a comment on this issue if you are interested in joining.][join]
 
-[join]: https://github.com/fitzgen/wee_alloc/issues/6
+[join]: https://github.com/rustwasm/wee_alloc/issues/6
