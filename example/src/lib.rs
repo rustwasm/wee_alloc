@@ -34,6 +34,10 @@ extern "C" fn oom() -> ! {
     }
 }
 
+// Needed for non-wasm targets.
+#[lang = "eh_personality"]
+pub extern "C" fn eh_personality() {}
+
 // Now, use the allocator via `alloc` types! ///////////////////////////////////
 
 use alloc::boxed::Box;
