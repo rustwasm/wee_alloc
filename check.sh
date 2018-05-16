@@ -21,6 +21,8 @@ cargo check --features size_classes
 cd -
 
 cd ./example
+cargo check
+cargo check --features size_classes
 cargo check                         --target wasm32-unknown-unknown
 cargo check --features size_classes --target wasm32-unknown-unknown
 cd -
