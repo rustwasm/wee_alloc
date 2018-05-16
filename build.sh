@@ -22,6 +22,9 @@ cd -
 
 cd ./example
 
+cargo build
+cargo build --features size_classes
+
 cargo build --release                         --target wasm32-unknown-unknown
 
 wasm-gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
