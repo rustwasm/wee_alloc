@@ -20,7 +20,9 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 // raise a `trap` the WebAssembly execution if we panic at runtime.
 #[panic_implementation]
 fn panic(_info: &::core::panic::PanicInfo) -> ! {
-    unsafe { ::core::intrinsics::abort() }
+    unsafe {
+        ::core::intrinsics::abort();
+    }
 }
 
 // Need to provide a tiny `oom` lang-item implementation for

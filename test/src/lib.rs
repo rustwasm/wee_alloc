@@ -1,6 +1,5 @@
 #![feature(alloc, allocator_api)]
 
-extern crate alloc;
 extern crate histo;
 #[macro_use]
 extern crate quickcheck;
