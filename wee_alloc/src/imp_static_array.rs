@@ -1,5 +1,5 @@
 use const_init::ConstInit;
-use core::alloc::{AllocErr, Opaque};
+use core::alloc::{AllocErr, u8};
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
 use core::ptr::NonNull;
@@ -10,12 +10,12 @@ const SCRATCH_LEN_BYTES: usize = include!(concat!(env!("OUT_DIR"), "/wee_alloc_s
 static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
-pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
+pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
     let mut offset = OFFSET.lock();
     let end = bytes.0 + *offset;
     if end < SCRATCH_LEN_BYTES {
-        let ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8 as *mut Opaque;
+        let ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
         *offset = end;
         NonNull::new(ptr).ok_or_else(|| AllocErr)
     } else {

@@ -1,5 +1,5 @@
 use const_init::ConstInit;
-use core::alloc::{AllocErr, Opaque};
+use core::alloc::{AllocErr, u8};
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
@@ -12,10 +12,10 @@ use winapi::um::synchapi::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 use winapi::um::winbase::{WAIT_OBJECT_0, INFINITE};
 use winapi::um::winnt::{HANDLE, MEM_COMMIT, PAGE_READWRITE};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
     let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) };
-    NonNull::new(ptr as *mut Opaque).ok_or(AllocErr)
+    NonNull::new(ptr as *mut u8).ok_or(AllocErr)
 }
 
 // Align to the cache line size on an i7 to avoid false sharing.

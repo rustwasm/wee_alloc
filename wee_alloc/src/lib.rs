@@ -222,7 +222,7 @@ for hacking!
 
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
-#![feature(alloc, allocator_api, core_intrinsics, global_allocator)]
+#![feature(alloc, allocator_api, core_intrinsics)]
 #![cfg_attr(target_arch = "wasm32", feature(link_llvm_intrinsics))]
 
 #[macro_use]
@@ -269,7 +269,7 @@ mod neighbors;
 mod size_classes;
 
 use const_init::ConstInit;
-use core::alloc::{Alloc, AllocErr, GlobalAlloc, Layout, Opaque};
+use core::alloc::{Alloc, AllocErr, GlobalAlloc, Layout};
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;
@@ -520,7 +520,7 @@ impl<'a> FreeCell<'a> {
     }
 
     unsafe fn from_uninitialized(
-        raw: NonNull<Opaque>,
+        raw: NonNull<u8>,
         size: Bytes,
         next_free: Option<*const FreeCell<'a>>,
         policy: &AllocPolicy<'a>,
@@ -586,7 +586,7 @@ impl<'a> FreeCell<'a> {
             let split_cell_head = split_and_aligned - size_of::<CellHeader>().0;
             let split_cell = unsafe {
                 &*FreeCell::from_uninitialized(
-                    unchecked_unwrap(NonNull::new(split_cell_head as *mut Opaque)),
+                    unchecked_unwrap(NonNull::new(split_cell_head as *mut u8)),
                     Bytes(next - split_cell_head) - size_of::<CellHeader>(),
                     None,
                     policy,
@@ -951,7 +951,7 @@ unsafe fn alloc_first_fit<'a>(
     align: Bytes,
     head: &Cell<*const FreeCell<'a>>,
     policy: &AllocPolicy<'a>,
-) -> Result<NonNull<Opaque>, AllocErr> {
+) -> Result<NonNull<u8>, AllocErr> {
     extra_assert!(size.0 > 0);
 
     walk_free_list(head, policy, |previous, current| {
@@ -960,7 +960,7 @@ unsafe fn alloc_first_fit<'a>(
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
             return Some(unchecked_unwrap(
-                NonNull::new(allocated.data() as *mut Opaque),
+                NonNull::new(allocated.data() as *mut u8),
             ));
         }
 
@@ -973,7 +973,7 @@ unsafe fn alloc_with_refill<'a, 'b>(
     align: Bytes,
     head: &'b Cell<*const FreeCell<'a>>,
     policy: &AllocPolicy<'a>,
-) -> Result<NonNull<Opaque>, AllocErr> {
+) -> Result<NonNull<u8>, AllocErr> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
     }
@@ -1072,7 +1072,7 @@ unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
 where
     'a: 'b,
 {
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<Opaque>, AllocErr> {
+    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
         let size = Bytes(layout.size());
         let align = if layout.align() == 0 {
             Bytes(1)
@@ -1084,7 +1084,7 @@ where
             // Ensure that our made up pointer is properly aligned by using the
             // alignment as the pointer.
             extra_assert!(align.0 > 0);
-            return Ok(NonNull::new_unchecked(align.0 as *mut Opaque));
+            return Ok(NonNull::new_unchecked(align.0 as *mut u8));
         }
 
         let size: Words = size.round_up_to();
@@ -1095,7 +1095,7 @@ where
         })
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<Opaque>, layout: Layout) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
         let size = Bytes(layout.size());
         if size.0 == 0 {
             return;
@@ -1185,15 +1185,15 @@ where
 }
 
 unsafe impl GlobalAlloc for WeeAlloc<'static> {
-    unsafe fn alloc(&self, layout: Layout) -> *mut Opaque {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let mut me = self;
         match Alloc::alloc(&mut me, layout) {
             Ok(ptr) => ptr.as_ptr(),
-            Err(AllocErr) => 0 as *mut Opaque,
+            Err(AllocErr) => 0 as *mut u8,
         }
     }
 
-    unsafe fn dealloc(&self, ptr: *mut Opaque, layout: Layout) {
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if let Some(ptr) = NonNull::new(ptr) {
             let mut me = self;
             Alloc::dealloc(&mut me, ptr, layout);
