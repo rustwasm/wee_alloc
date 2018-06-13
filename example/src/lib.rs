@@ -6,7 +6,7 @@
 // We aren't using the standard library.
 #![no_std]
 // Replacing the allocator and using the `alloc` crate are still unstable.
-#![feature(alloc, core_intrinsics, global_allocator, lang_items)]
+#![feature(alloc, core_intrinsics, panic_implementation, lang_items)]
 
 extern crate alloc;
 extern crate wee_alloc;
@@ -15,14 +15,12 @@ extern crate wee_alloc;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-// Need to provide a tiny `panic_fmt` lang-item implementation for
-// `#![no_std]`. This translates into an `unreachable` instruction that will
+// Need to provide a tiny `panic` implementation for `#![no_std]`.
+// This translates into an `unreachable` instruction that will
 // raise a `trap` the WebAssembly execution if we panic at runtime.
-#[lang = "panic_fmt"]
-extern "C" fn panic_fmt(_args: ::core::fmt::Arguments, _file: &'static str, _line: u32) -> ! {
-    unsafe {
-        ::core::intrinsics::abort();
-    }
+#[panic_implementation]
+fn panic(_info: &::core::panic::PanicInfo) -> ! {
+    unsafe { ::core::intrinsics::abort() }
 }
 
 // Need to provide a tiny `oom` lang-item implementation for

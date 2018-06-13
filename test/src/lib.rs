@@ -9,7 +9,7 @@ extern crate cfg_if;
 extern crate rand;
 extern crate wee_alloc;
 
-use alloc::heap::{Alloc, Layout};
+use std::alloc::{Alloc, Layout};
 use quickcheck::{Arbitrary, Gen};
 use std::f64;
 use std::fs;
