@@ -1,6 +1,5 @@
 #![feature(alloc, allocator_api)]
 
-extern crate alloc;
 extern crate histo;
 #[macro_use]
 extern crate quickcheck;
@@ -9,7 +8,7 @@ extern crate cfg_if;
 extern crate rand;
 extern crate wee_alloc;
 
-use alloc::heap::{Alloc, Layout};
+use std::alloc::{Alloc, Layout};
 use quickcheck::{Arbitrary, Gen};
 use std::f64;
 use std::fs;
@@ -374,7 +373,7 @@ quickcheck! {
         let align = ALIGNS[align % ALIGNS.len()];
 
         let mut w = &wee_alloc::WeeAlloc::INIT;
-        let layout = alloc::heap::Layout::from_size_align(size, align).unwrap();
+        let layout = Layout::from_size_align(size, align).unwrap();
         let _ = unsafe { w.alloc(layout) };
     }
 }

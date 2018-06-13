@@ -1,11 +1,11 @@
 use const_init::ConstInit;
-use core::alloc::{AllocErr, Opaque};
+use core::alloc::AllocErr;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use libc;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();
         let addr = libc::mmap(
@@ -19,7 +19,7 @@ pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<Opaque>, AllocErr> {
         if addr == libc::MAP_FAILED {
             Err(AllocErr)
         } else {
-            NonNull::new(addr as *mut Opaque).ok_or(AllocErr)
+            NonNull::new(addr as *mut u8).ok_or(AllocErr)
         }
     }
 }
