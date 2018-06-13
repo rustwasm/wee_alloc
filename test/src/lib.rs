@@ -374,7 +374,7 @@ quickcheck! {
         let align = ALIGNS[align % ALIGNS.len()];
 
         let mut w = &wee_alloc::WeeAlloc::INIT;
-        let layout = alloc::heap::Layout::from_size_align(size, align).unwrap();
+        let layout = Layout::from_size_align(size, align).unwrap();
         let _ = unsafe { w.alloc(layout) };
     }
 }

@@ -1,8 +1,6 @@
 // Adopted from
 // https://github.com/alexcrichton/dlmalloc-rs/blob/master/tests/global.rs
 
-#![feature(global_allocator)]
-
 extern crate wee_alloc;
 
 use std::collections::HashMap;
