@@ -1,6 +1,6 @@
 use super::{assert_is_word_aligned, PAGE_SIZE, unchecked_unwrap};
 use const_init::ConstInit;
-use core::alloc::{AllocErr, u8};
+use core::alloc::AllocErr;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::Pages;
