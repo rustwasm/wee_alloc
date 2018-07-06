@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
 
 [dependencies]
-quicli = "0.2"
+quicli = "0.3"
 duct = "0.10.0"
 regex = "0.2.10"
