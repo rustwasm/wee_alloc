@@ -52,7 +52,7 @@ infrastructure. Nevertheless, `wee_alloc` is also usable with `std`.
 
 // Required to use the `alloc` crate and its types, the `abort` intrinsic, and a
 // custom panic handler.
-#![feature(alloc, core_intrinsics, panic_implementation, lang_items)]
+#![feature(alloc, core_intrinsics, panic_implementation, lang_items, alloc_error_handler)]
 
 extern crate alloc;
 extern crate wee_alloc;
@@ -72,11 +72,11 @@ pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
     }
 }
 
-// Need to provide a tiny `oom` lang-item implementation for
-// `#![no_std]`.
-#[lang = "oom"]
+// Need to provide an allocation error handler which just aborts 
+// the execution with trap.
+#[alloc_error_handler]
 #[no_mangle]
-pub extern "C" fn oom() -> ! {
+pub extern "C" fn oom(_: ::core::alloc::Layout) -> ! {
     unsafe {
         ::core::intrinsics::abort();
     }
