@@ -1,5 +1,6 @@
 # `wee_alloc`
 
+
 [![](https://docs.rs/wee_alloc/badge.svg)](https://docs.rs/wee_alloc/)
 [![](https://img.shields.io/crates/v/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
 [![](https://img.shields.io/crates/d/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
