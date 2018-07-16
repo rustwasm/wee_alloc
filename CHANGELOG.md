@@ -1,3 +1,9 @@
+### 0.4.2
+
+Released 2018/07/16.
+
+* Updated again for changes to Rust's standard allocator API.
+
 ### 0.4.1
 
 Released 2018/06/15.
