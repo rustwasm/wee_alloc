@@ -1,4 +1,6 @@
-# `wee_alloc`
+[![Build Status](https://travis-ci.org/rustwasm/wee_alloc.svg?branch=master)](https://travis-ci.org/rustwasm/wee_alloc)
+
+# wee_alloc
 
 
 [![](https://docs.rs/wee_alloc/badge.svg)](https://docs.rs/wee_alloc/)
@@ -222,3 +224,5 @@ See
 [CONTRIBUTING.md](https://github.com/rustwasm/wee_alloc/blob/master/CONTRIBUTING.md)
 for hacking!
 
+
+License: MPL-2.0
