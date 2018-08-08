@@ -272,7 +272,9 @@ mod neighbors;
 mod size_classes;
 
 use const_init::ConstInit;
-use core::alloc::{Alloc, AllocErr, GlobalAlloc, Layout};
+#[cfg(feature = "nightly")]
+use core::alloc::Alloc;
+use core::alloc::{AllocErr, GlobalAlloc, Layout};
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;
@@ -1069,13 +1071,8 @@ impl<'a> WeeAlloc<'a> {
             result
         })
     }
-}
 
-unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
-where
-    'a: 'b,
-{
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
         let size = Bytes(layout.size());
         let align = if layout.align() == 0 {
             Bytes(1)
@@ -1098,7 +1095,7 @@ where
         })
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn dealloc_impl(&self, ptr: NonNull<u8>, layout: Layout) {
         let size = Bytes(layout.size());
         if size.0 == 0 {
             return;
@@ -1187,10 +1184,23 @@ where
     }
 }
 
+#[cfg(feature = "nightly")]
+unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
+where
+    'a: 'b,
+{
+    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+        self.alloc_impl(layout)
+    }
+
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+        self.dealloc_impl(ptr, layout)
+    }
+}
+
 unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let mut me = self;
-        match Alloc::alloc(&mut me, layout) {
+        match self.alloc_impl(layout) {
             Ok(ptr) => ptr.as_ptr(),
             Err(AllocErr) => 0 as *mut u8,
         }
@@ -1198,8 +1208,7 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if let Some(ptr) = NonNull::new(ptr) {
-            let mut me = self;
-            Alloc::dealloc(&mut me, ptr, layout);
+            self.dealloc_impl(ptr, layout);
         }
     }
 }
