@@ -272,7 +272,9 @@ mod neighbors;
 mod size_classes;
 
 use const_init::ConstInit;
-use core::alloc::{Alloc, AllocErr, GlobalAlloc, Layout};
+#[cfg(feature = "nightly")]
+use core::alloc::Alloc;
+use core::alloc::{AllocErr, GlobalAlloc, Layout};
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;
@@ -1182,7 +1184,7 @@ impl<'a> WeeAlloc<'a> {
     }
 }
 
-#[cfg(nightly)]
+#[cfg(feature = "nightly")]
 unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
 where
     'a: 'b,
