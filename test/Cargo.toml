@@ -12,7 +12,7 @@ cfg-if = "0.1.2"
 [dependencies.wee_alloc]
 path = "../wee_alloc"
 default-features = false
-features = ["use_std_for_test_debugging"]
+features = ["use_std_for_test_debugging", "nightly"]
 
 [features]
 size_classes = ["wee_alloc/size_classes"]
