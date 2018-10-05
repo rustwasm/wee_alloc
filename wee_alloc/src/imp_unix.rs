@@ -1,15 +1,15 @@
 use const_init::ConstInit;
 use core::alloc::AllocErr;
 use core::cell::UnsafeCell;
-use core::ptr::NonNull;
+use core::ptr;
 use libc;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<ptr::NonNull<u8>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();
         let addr = libc::mmap(
-            0 as *mut _,
+            ptr::null_mut(),
             bytes.0,
             libc::PROT_WRITE | libc::PROT_READ,
             libc::MAP_ANON | libc::MAP_PRIVATE,
@@ -19,7 +19,7 @@ pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
         if addr == libc::MAP_FAILED {
             Err(AllocErr)
         } else {
-            NonNull::new(addr as *mut u8).ok_or(AllocErr)
+            ptr::NonNull::new(addr as *mut u8).ok_or(AllocErr)
         }
     }
 }
@@ -48,7 +48,7 @@ impl<T> Exclusive<T> {
     /// this method for the same `Exclusive` instance, there will be undetected
     /// mutable aliasing, which is UB.
     #[inline]
-    pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
+    pub(crate) unsafe fn with_exclusive_access<F, U>(&self, f: F) -> U
     where
         for<'x> F: FnOnce(&'x mut T) -> U,
     {
