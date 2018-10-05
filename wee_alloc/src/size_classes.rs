@@ -1,6 +1,5 @@
-use super::{alloc_with_refill, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
+use super::{alloc_with_refill, AllocErr, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
 use const_init::ConstInit;
-use core::alloc::AllocErr;
 use core::cell::Cell;
 use core::cmp;
 use imp;

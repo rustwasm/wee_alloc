@@ -24,15 +24,13 @@ for small code size. In contrast, `wee_alloc` would be a poor choice for a
 scenario where allocation is a performance bottleneck.
 
 Although WebAssembly is the primary target, `wee_alloc` also has an `mmap` based
-implementation for unix systems and a `VirtualAlloc` implementation for Windows.
-This enables testing `wee_alloc`, and code using `wee_alloc`, without a browser
-or WebAssembly engine.
-
-**⚠ Custom allocators currently require Nightly Rust. ⚠**
+implementation for unix systems, a `VirtualAlloc` implementation for Windows,
+and a static array-based backend for OS-independent environments. This enables
+testing `wee_alloc`, and code using `wee_alloc`, without a browser or
+WebAssembly engine.
 
 - [Using `wee_alloc` as the Global Allocator](#using-wee_alloc-as-the-global-allocator)
-  - [With `#![no_std]`](#with-no_std)
-  - [With `std`](#with-std)
+- [Does `wee_alloc` require nightly Rust?](#does-wee_alloc-require-nightly-rust)
 - [`cargo` Features](#cargo-features)
 - [Implementation Notes and Constraints](#implementation-notes-and-constraints)
 - [License](#license)
@@ -40,67 +38,29 @@ or WebAssembly engine.
 
 ## Using `wee_alloc` as the Global Allocator
 
-To get the smallest `.wasm` sizes, you want to use `#![no_std]` with a custom
-panicking hook that avoids using any of the `core::fmt`
-infrastructure. Nevertheless, `wee_alloc` is also usable with `std`.
-
-### With `#![no_std]`
-
 ```
-// We aren't using the standard library.
-#![no_std]
-
-// Required to use the `alloc` crate and its types, the `abort` intrinsic, and a
-// custom panic handler.
-#![feature(alloc, core_intrinsics, panic_implementation, lang_items, alloc_error_handler)]
-
-extern crate alloc;
-extern crate wee_alloc;
-
-// Use `wee_alloc` as the global allocator.
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-// Need to provide a tiny `panic` implementation for `#![no_std]`.
-// This translates into an `unreachable` instruction that will
-// raise a `trap` the WebAssembly execution if we panic at runtime.
-#[panic_implementation]
-#[no_mangle]
-pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
-    unsafe {
-        ::core::intrinsics::abort();
-    }
-}
-
-// Need to provide an allocation error handler which just aborts
-// the execution with trap.
-#[alloc_error_handler]
-#[no_mangle]
-pub extern "C" fn oom(_: ::core::alloc::Layout) -> ! {
-    unsafe {
-        ::core::intrinsics::abort();
-    }
-}
-
-// And now you can use `alloc` types!
-use alloc::arc::Arc;
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-// etc...
-```
-
-### With `std`
-
-```
-// Required to replace the global allocator.
-#![feature(global_allocator)]
-
 extern crate wee_alloc;
 
 // Use `wee_alloc` as the global allocator.
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 ```
+
+## Does `wee_alloc` require nightly Rust?
+
+Sometimes.
+
+Notably, using `wee_alloc` when targeting WebAssembly requires nightly in order
+to get access to the Wasm `grow_memory` instruction (currently exposed as part
+of the `stdsimd` nightly feature).
+
+Targeting Unix and Windows does not require nightly Rust.
+
+The static array-based backend requires nightly Rust in order to have `const`
+spin locks.
+
+Additional nightly-only features can be enabled with the "nightly" cargo
+feature. See below.
 
 ## `cargo` Features
 
@@ -114,12 +74,16 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   itself.
 
 - **static_array_backend**: Force the use of an OS-independent backing
-  implementation with a global maximum size fixed at compile time.
-  Suitable for deploying to non-WASM/Unix/Windows `#![no_std]` environments,
-  such as on embedded devices with esoteric or effectively absent operating
-  systems. The size defaults to 32 MiB (33554432 bytes), and may be controlled
-  at build-time by supplying an optional environment variable to cargo,
-  `WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES`
+  implementation with a global maximum size fixed at compile time.  Suitable for
+  deploying to non-WASM/Unix/Windows `#![no_std]` environments, such as on
+  embedded devices with esoteric or effectively absent operating systems. The
+  size defaults to 32 MiB (33554432 bytes), and may be controlled at build-time
+  by supplying an optional environment variable to cargo,
+  `WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES`. Note that this feature requires
+  nightly Rust.
+
+- **nightly**: Enable usage of nightly-only Rust features, such as implementing
+  the `Alloc` trait (not to be confused with the stable `GlobalAlloc` trait!)
 
 ## Implementation Notes and Constraints
 
@@ -225,12 +189,13 @@ for hacking!
 
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
-#![feature(alloc, allocator_api, core_intrinsics)]
+#![cfg_attr(feature = "nightly", feature(alloc, allocator_api, core_intrinsics))]
 #![cfg_attr(target_arch = "wasm32", feature(stdsimd))]
 
 #[macro_use]
 extern crate cfg_if;
 
+#[cfg(feature = "nightly")]
 extern crate alloc;
 
 #[cfg(feature = "use_std_for_test_debugging")]
@@ -271,10 +236,16 @@ mod neighbors;
 #[cfg(feature = "size_classes")]
 mod size_classes;
 
+cfg_if! {
+    if #[cfg(feature = "nightly")] {
+        use core::alloc::{Alloc, AllocErr};
+    } else {
+        pub(crate) struct AllocErr;
+    }
+}
+
 use const_init::ConstInit;
-#[cfg(feature = "nightly")]
-use core::alloc::Alloc;
-use core::alloc::{AllocErr, GlobalAlloc, Layout};
+use core::alloc::{GlobalAlloc, Layout};
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;

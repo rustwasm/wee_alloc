@@ -1,5 +1,5 @@
 use const_init::ConstInit;
-use core::alloc::AllocErr;
+use super::AllocErr;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
 use core::ptr::NonNull;

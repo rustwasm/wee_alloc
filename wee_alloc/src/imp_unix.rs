@@ -1,5 +1,5 @@
+use super::AllocErr;
 use const_init::ConstInit;
-use core::alloc::AllocErr;
 use core::cell::UnsafeCell;
 use core::ptr;
 use libc;
