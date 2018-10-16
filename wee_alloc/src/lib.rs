@@ -72,7 +72,7 @@ pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
     }
 }
 
-// Need to provide an allocation error handler which just aborts 
+// Need to provide an allocation error handler which just aborts
 // the execution with trap.
 #[alloc_error_handler]
 #[no_mangle]
@@ -583,7 +583,6 @@ impl<'a> FreeCell<'a> {
         // choose to split at some alignment and return the aligned cell at the
         // end.
         let next = self.header.neighbors.next_unchecked() as usize;
-        let align: Bytes = align.into();
         let split_and_aligned = (next - size.0) & !(align.0 - 1);
         let data = unsafe { self.header.unchecked_data() } as usize;
         let min_cell_size: Bytes = policy.min_cell_size(alloc_size).into();
@@ -612,7 +611,6 @@ impl<'a> FreeCell<'a> {
         // requested allocation. Because of the early check, we know this cell
         // is large enough to fit the requested size, but is the cell's data
         // properly aligned?
-        let align: Bytes = align.into();
         if self.header.is_aligned_to(align) {
             previous.set(self.next_free());
             let allocated = self.into_allocated_cell(policy);
@@ -830,7 +828,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         // left over.
         let size: Bytes = cmp::max(
             size.into(),
-            ((align + Self::MIN_CELL_SIZE) * Words(2)).into(),
+            (align + Self::MIN_CELL_SIZE) * Words(2),
         );
 
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
@@ -844,7 +842,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
             self as &AllocPolicy<'a>,
         );
 
-        let next_cell = (new_pages.as_ptr() as *const u8).offset(allocated_size.0 as isize);
+        let next_cell = (new_pages.as_ptr() as *const u8).add(allocated_size.0);
         free_cell
             .header
             .neighbors
@@ -1034,7 +1032,6 @@ impl<'a> WeeAlloc<'a> {
         extra_assert!(size.0 > 0);
         extra_assert!(align.0 > 0);
 
-        let align: Bytes = align.into();
         if align <= size_of::<usize>() {
             if let Some(head) = self.size_classes.get(size) {
                 let policy = size_classes::SizeClassAllocPolicy(&self.head);
@@ -1202,7 +1199,7 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         match self.alloc_impl(layout) {
             Ok(ptr) => ptr.as_ptr(),
-            Err(AllocErr) => 0 as *mut u8,
+            Err(AllocErr) => ptr::null_mut(),
         }
     }
 
