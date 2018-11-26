@@ -6,7 +6,7 @@
 // We aren't using the standard library.
 #![no_std]
 // Replacing the allocator and using the `alloc` crate are still unstable.
-#![feature(alloc, core_intrinsics, panic_implementation, lang_items, alloc_error_handler)]
+#![feature(alloc, core_intrinsics, lang_items, alloc_error_handler)]
 
 extern crate alloc;
 extern crate wee_alloc;
@@ -18,7 +18,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 // Need to provide a tiny `panic` implementation for `#![no_std]`.
 // This translates into an `unreachable` instruction that will
 // raise a `trap` the WebAssembly execution if we panic at runtime.
-#[panic_implementation]
+#[panic_handler]
 #[no_mangle]
 pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
     unsafe {
@@ -26,7 +26,7 @@ pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
     }
 }
 
-// Need to provide an allocation error handler which just aborts 
+// Need to provide an allocation error handler which just aborts
 // the execution with trap.
 #[alloc_error_handler]
 #[no_mangle]
