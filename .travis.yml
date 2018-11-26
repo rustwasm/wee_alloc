@@ -20,3 +20,15 @@ before_script:
 
 script:
   - "$SCRIPT"
+
+matrix:
+  include:
+    - rust: stable
+      before_script:
+        - rustup target add i686-pc-windows-gnu
+      script:
+        - cd ./wee_alloc
+        - cargo check --release --features "size_classes"
+        - cargo check --release
+        - cargo check --release --features "size_classes" --target i686-pc-windows-gnu
+        - cargo check --release                           --target i686-pc-windows-gnu
