@@ -343,7 +343,7 @@ struct FreeCell<'a> {
 #[test]
 fn free_cell_layout() {
     assert_eq!(
-        size_of::<CellHeader>() + Bytes(1),
+        size_of::<CellHeader>() + Words(1),
         size_of::<FreeCell>(),
         "Safety and correctness depends on FreeCell being only one word larger than CellHeader"
     );
