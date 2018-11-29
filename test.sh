@@ -10,6 +10,10 @@ cp README.md $OLD_README
 cargo readme -r wee_alloc -t "$(pwd)/README.tpl" > README.md
 diff $OLD_README README.md
 
+cd ./wee_alloc
+time cargo test
+cd -
+
 cd ./test
 time cargo test --release --features "extra_assertions size_classes"
 time cargo test --release --features "extra_assertions"
