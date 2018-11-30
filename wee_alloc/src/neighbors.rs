@@ -56,15 +56,15 @@ where
 
     // Mask to get the aligned pointer.
     const PTR_MASK: usize = !0b11;
+}
 
-    #[test]
-    fn can_use_low_bits() {
-        use core::mem;
-        assert!(
-            mem::align_of::<*const u8>() >= 0b100,
-            "we rely on being able to stick tags into the lowest two bits"
-        );
-    }
+#[test]
+fn can_use_low_bits() {
+    use core::mem;
+    assert!(
+        mem::align_of::<*const u8>() >= 0b100,
+        "we rely on being able to stick tags into the lowest two bits"
+    );
 }
 
 /// Get bits.
