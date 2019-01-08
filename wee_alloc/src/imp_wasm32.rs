@@ -7,9 +7,9 @@ use core::ptr::NonNull;
 use memory_units::Pages;
 
 pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<u8>, AllocErr> {
-    let ptr = wasm32::memory::grow(0, n.0 as i32);
-    if -1 != ptr {
-        let ptr = (ptr as usize * PAGE_SIZE.0) as *mut u8;
+    let ptr = wasm32::memory_grow(0, n.0);
+    if ptr != usize::max_value() {
+        let ptr = (ptr * PAGE_SIZE.0) as *mut u8;
         assert_is_word_aligned(ptr as *mut u8);
         Ok(unchecked_unwrap(NonNull::new(ptr)))
     } else {

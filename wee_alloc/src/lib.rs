@@ -191,7 +191,6 @@ for hacking!
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
 #![cfg_attr(feature = "nightly", feature(alloc, allocator_api, core_intrinsics))]
-#![cfg_attr(target_arch = "wasm32", feature(stdsimd))]
 
 #[macro_use]
 extern crate cfg_if;
