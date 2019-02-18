@@ -2,6 +2,7 @@
 
 Released 2019/02/18.
 
+* Add support for building on stable Rust on Windows and Unix.
 * `wasm32` intrinsics are now invoked using `core::arch` rather than LLVM.
 * Use `SRWLOCK` for windows implementation.
 
