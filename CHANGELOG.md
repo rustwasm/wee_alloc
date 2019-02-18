@@ -1,3 +1,10 @@
+### 0.4.3
+
+Released 2019/02/18.
+
+* `wasm32` intrinsics are now invoked using `core::arch` rather than LLVM.
+* Use `SRWLOCK` for windows implementation.
+
 ### 0.4.2
 
 Released 2018/07/16.
