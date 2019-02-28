@@ -29,8 +29,9 @@ and a static array-based backend for OS-independent environments. This enables
 testing `wee_alloc`, and code using `wee_alloc`, without a browser or
 WebAssembly engine.
 
+`wee_alloc` compiles on stable Rust 1.33 and newer.
+
 - [Using `wee_alloc` as the Global Allocator](#using-wee_alloc-as-the-global-allocator)
-- [Does `wee_alloc` require nightly Rust?](#does-wee_alloc-require-nightly-rust)
 - [`cargo` Features](#cargo-features)
 - [Implementation Notes and Constraints](#implementation-notes-and-constraints)
 - [License](#license)
@@ -46,22 +47,6 @@ extern crate wee_alloc;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 # fn main() {}
 ```
-
-## Does `wee_alloc` require nightly Rust?
-
-Sometimes.
-
-Notably, using `wee_alloc` when targeting WebAssembly requires nightly in order
-to get access to the Wasm `grow_memory` instruction (currently exposed as part
-of the `stdsimd` nightly feature).
-
-Targeting Unix and Windows does not require nightly Rust.
-
-The static array-based backend requires nightly Rust in order to have `const`
-spin locks.
-
-Additional nightly-only features can be enabled with the "nightly" cargo
-feature. See below.
 
 ## `cargo` Features
 
