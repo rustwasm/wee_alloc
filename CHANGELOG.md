@@ -1,3 +1,9 @@
+### 0.4.4
+
+Released 2019/04/15.
+
+* Add support for running on stable Rust 1.33 and newer.
+
 ### 0.4.3
 
 Released 2019/02/18.
