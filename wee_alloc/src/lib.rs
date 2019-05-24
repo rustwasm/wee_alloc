@@ -1,10 +1,6 @@
 /*!
 
-[![](https://docs.rs/wee_alloc/badge.svg)](https://docs.rs/wee_alloc/)
-[![](https://img.shields.io/crates/v/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
-[![](https://img.shields.io/crates/d/wee_alloc.svg)](https://crates.io/crates/wee_alloc)
-[![Travis CI Build Status](https://travis-ci.org/rustwasm/wee_alloc.svg?branch=master)](https://travis-ci.org/rustwasm/wee_alloc)
-[![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/bqh8elm9wy0k5x2r/branch/master?svg=true)](https://ci.appveyor.com/project/rustwasm/wee-alloc/branch/master)
+## About
 
 `wee_alloc`: The **W**asm-**E**nabled, **E**lfin Allocator.
 
