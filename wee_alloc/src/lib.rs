@@ -185,7 +185,6 @@ extern crate core;
 extern crate spin;
 
 extern crate memory_units;
-extern crate unreachable;
 
 #[macro_use]
 mod extra_assert;
@@ -825,10 +824,9 @@ cfg_if! {
     } else {
         #[inline]
         unsafe fn unchecked_unwrap<T>(o: Option<T>) -> T {
-            use unreachable::unreachable;
             match o {
                 Some(t) => t,
-                None => unreachable(),
+                None => core::hint::unreachable_unchecked(),
             }
         }
     }
