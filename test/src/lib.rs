@@ -157,7 +157,7 @@ impl Arbitrary for Operations {
     }
 
     #[inline(never)]
-    fn shrink(&self) -> Box<Iterator<Item = Self>> {
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         let ops = self.0.clone();
         let prefixes =
             (0..self.0.len()).map(move |i| Operations(ops.iter().cloned().take(i).collect()));

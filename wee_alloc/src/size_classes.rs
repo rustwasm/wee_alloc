@@ -71,7 +71,7 @@ where
             new_cell,
             new_cell_size - size_of::<CellHeader>(),
             None,
-            self as &AllocPolicy,
+            self as &dyn AllocPolicy,
         );
         let next_cell = (new_cell.as_ptr() as *const u8).offset(new_cell_size.0 as isize);
         (*free_cell)
