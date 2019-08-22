@@ -1,4 +1,4 @@
-#![feature(alloc, allocator_api)]
+#![feature(allocator_api)]
 
 extern crate histo;
 #[macro_use]

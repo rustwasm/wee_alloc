@@ -6,7 +6,7 @@
 // We aren't using the standard library.
 #![no_std]
 // Replacing the allocator and using the `alloc` crate are still unstable.
-#![feature(alloc, core_intrinsics, lang_items, alloc_error_handler)]
+#![feature(core_intrinsics, lang_items, alloc_error_handler)]
 
 extern crate alloc;
 extern crate wee_alloc;
