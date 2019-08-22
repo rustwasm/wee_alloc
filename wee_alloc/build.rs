@@ -38,7 +38,8 @@ fn export_rerun_rules() {
         "./build.rs",
         "./src/lib.rs",
         "./src/imp_static_array.rs",
-    ].iter()
+    ]
+    .iter()
     {
         println!("cargo:rerun-if-changed={}", path);
     }

@@ -1,3 +1,10 @@
+### 0.4.5
+
+Released 2019/08/22.
+
+* Drop `unreachable` dependency, now that `core::hints::unreachable_unchecked`
+  is stable in Rust 1.27.
+
 ### 0.4.4
 
 Released 2019/04/15.

@@ -171,7 +171,7 @@ for hacking!
 
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
-#![cfg_attr(feature = "nightly", feature(alloc, allocator_api, core_intrinsics))]
+#![cfg_attr(feature = "nightly", feature(allocator_api, core_intrinsics))]
 
 #[macro_use]
 extern crate cfg_if;
@@ -479,7 +479,7 @@ impl<'a> FreeCell<'a> {
         raw: NonNull<u8>,
         size: Bytes,
         next_free: Option<*const FreeCell<'a>>,
-        policy: &AllocPolicy<'a>,
+        policy: &dyn AllocPolicy<'a>,
     ) -> *const FreeCell<'a> {
         assert_is_word_aligned(raw.as_ptr() as *mut u8);
 
@@ -499,7 +499,7 @@ impl<'a> FreeCell<'a> {
         raw
     }
 
-    fn into_allocated_cell(&self, policy: &AllocPolicy<'a>) -> &AllocatedCell<'a> {
+    fn into_allocated_cell(&self, policy: &dyn AllocPolicy<'a>) -> &AllocatedCell<'a> {
         assert_local_cell_invariants(&self.header);
         assert_is_poisoned_with_free_pattern(self, policy);
 
@@ -513,7 +513,7 @@ impl<'a> FreeCell<'a> {
         previous: &'b Cell<*const FreeCell<'a>>,
         alloc_size: Words,
         align: Bytes,
-        policy: &AllocPolicy<'a>,
+        policy: &dyn AllocPolicy<'a>,
     ) -> Option<&'b AllocatedCell<'a>> {
         extra_assert!(alloc_size.0 > 0);
         extra_assert!(align.0 > 0);
@@ -575,7 +575,7 @@ impl<'a> FreeCell<'a> {
     fn insert_into_free_list<'b>(
         &'b self,
         head: &'b Cell<*const FreeCell<'a>>,
-        policy: &AllocPolicy<'a>,
+        policy: &dyn AllocPolicy<'a>,
     ) -> &'b Cell<*const FreeCell<'a>> {
         extra_assert!(!self.next_free_can_merge());
         extra_assert!(self.next_free().is_null());
@@ -602,7 +602,7 @@ impl<'a> FreeCell<'a> {
 }
 
 impl<'a> AllocatedCell<'a> {
-    unsafe fn into_free_cell(&self, policy: &AllocPolicy<'a>) -> &FreeCell<'a> {
+    unsafe fn into_free_cell(&self, policy: &dyn AllocPolicy<'a>) -> &FreeCell<'a> {
         assert_local_cell_invariants(&self.header);
 
         CellHeader::set_free(&self.header.neighbors);
@@ -620,7 +620,7 @@ impl<'a> AllocatedCell<'a> {
 }
 
 extra_only! {
-    fn write_free_pattern(cell: &FreeCell, size: Bytes, policy: &AllocPolicy) {
+    fn write_free_pattern(cell: &FreeCell, size: Bytes, policy: &dyn AllocPolicy) {
         unsafe {
             let data = cell.tail_data();
             let pattern = policy.free_pattern();
@@ -634,7 +634,7 @@ extra_only! {
 }
 
 extra_only! {
-    fn assert_is_poisoned_with_free_pattern(cell: &FreeCell, policy: &AllocPolicy) {
+    fn assert_is_poisoned_with_free_pattern(cell: &FreeCell, policy: &dyn AllocPolicy) {
         use core::slice;
         unsafe {
             let size: Bytes = cell.tail_data_size();
@@ -698,7 +698,7 @@ extra_only! {
     //
     // This is O(size of free list) and can be pretty slow, so try to restrict
     // its usage to verifying that a free list is still valid after mutation.
-    fn assert_is_valid_free_list(head: *const FreeCell, policy: &AllocPolicy) {
+    fn assert_is_valid_free_list(head: *const FreeCell, policy: &dyn AllocPolicy) {
         unsafe {
             let mut left = head;
             assert_local_cell_invariants(left as *const CellHeader);
@@ -777,10 +777,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         // free list with this new cell, make sure that we allocate enough to
         // fulfill the requested alignment, and still have the minimum cell size
         // left over.
-        let size: Bytes = cmp::max(
-            size.into(),
-            (align + Self::MIN_CELL_SIZE) * Words(2),
-        );
+        let size: Bytes = cmp::max(size.into(), (align + Self::MIN_CELL_SIZE) * Words(2));
 
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
         let new_pages = imp::alloc_pages(pages)?;
@@ -790,7 +787,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
             new_pages,
             allocated_size - size_of::<CellHeader>(),
             None,
-            self as &AllocPolicy<'a>,
+            self as &dyn AllocPolicy<'a>,
         );
 
         let next_cell = (new_pages.as_ptr() as *const u8).add(allocated_size.0);
@@ -834,7 +831,7 @@ cfg_if! {
 
 unsafe fn walk_free_list<'a, F, T>(
     head: &Cell<*const FreeCell<'a>>,
-    policy: &AllocPolicy<'a>,
+    policy: &dyn AllocPolicy<'a>,
     mut f: F,
 ) -> Result<T, AllocErr>
 where
@@ -903,7 +900,7 @@ unsafe fn alloc_first_fit<'a>(
     size: Words,
     align: Bytes,
     head: &Cell<*const FreeCell<'a>>,
-    policy: &AllocPolicy<'a>,
+    policy: &dyn AllocPolicy<'a>,
 ) -> Result<NonNull<u8>, AllocErr> {
     extra_assert!(size.0 > 0);
 
@@ -912,9 +909,7 @@ unsafe fn alloc_first_fit<'a>(
 
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
-            return Some(unchecked_unwrap(
-                NonNull::new(allocated.data() as *mut u8),
-            ));
+            return Some(unchecked_unwrap(NonNull::new(allocated.data() as *mut u8)));
         }
 
         None
@@ -925,7 +920,7 @@ unsafe fn alloc_with_refill<'a, 'b>(
     size: Words,
     align: Bytes,
     head: &'b Cell<*const FreeCell<'a>>,
-    policy: &AllocPolicy<'a>,
+    policy: &dyn AllocPolicy<'a>,
 ) -> Result<NonNull<u8>, AllocErr> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
@@ -977,7 +972,7 @@ impl<'a> WeeAlloc<'a> {
     #[cfg(feature = "size_classes")]
     unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, align: Bytes, f: F) -> T
     where
-        F: for<'b> FnOnce(&'b Cell<*const FreeCell<'a>>, &'b AllocPolicy<'a>) -> T,
+        F: for<'b> FnOnce(&'b Cell<*const FreeCell<'a>>, &'b dyn AllocPolicy<'a>) -> T,
     {
         extra_assert!(size.0 > 0);
         extra_assert!(align.0 > 0);
@@ -985,7 +980,7 @@ impl<'a> WeeAlloc<'a> {
         if align <= size_of::<usize>() {
             if let Some(head) = self.size_classes.get(size) {
                 let policy = size_classes::SizeClassAllocPolicy(&self.head);
-                let policy = &policy as &AllocPolicy<'a>;
+                let policy = &policy as &dyn AllocPolicy<'a>;
                 return head.with_exclusive_access(|head| {
                     let head_cell = Cell::new(*head);
                     let result = f(&head_cell, policy);
@@ -995,7 +990,7 @@ impl<'a> WeeAlloc<'a> {
             }
         }
 
-        let policy = &LARGE_ALLOC_POLICY as &AllocPolicy<'a>;
+        let policy = &LARGE_ALLOC_POLICY as &dyn AllocPolicy<'a>;
         self.head.with_exclusive_access(|head| {
             let head_cell = Cell::new(*head);
             let result = f(&head_cell, policy);
@@ -1007,10 +1002,10 @@ impl<'a> WeeAlloc<'a> {
     #[cfg(not(feature = "size_classes"))]
     unsafe fn with_free_list_and_policy_for_size<F, T>(&self, size: Words, _align: Bytes, f: F) -> T
     where
-        F: for<'b> FnOnce(&'b Cell<*const FreeCell<'a>>, &'b AllocPolicy<'a>) -> T,
+        F: for<'b> FnOnce(&'b Cell<*const FreeCell<'a>>, &'b dyn AllocPolicy<'a>) -> T,
     {
         extra_assert!(size.0 > 0);
-        let policy = &LARGE_ALLOC_POLICY as &AllocPolicy;
+        let policy = &LARGE_ALLOC_POLICY as &dyn AllocPolicy;
         self.head.with_exclusive_access(|head| {
             let head_cell = Cell::new(*head);
             let result = f(&head_cell, policy);
@@ -1093,7 +1088,8 @@ impl<'a> WeeAlloc<'a> {
                 // immediately, whereas the consolidating with the next adjacent
                 // cell must be delayed, as explained above.
 
-                if let Some(prev) = free.header
+                if let Some(prev) = free
+                    .header
                     .neighbors
                     .prev()
                     .and_then(|p| (*p).as_free_cell())
@@ -1108,7 +1104,8 @@ impl<'a> WeeAlloc<'a> {
                     return;
                 }
 
-                if let Some(next) = free.header
+                if let Some(next) = free
+                    .header
                     .neighbors
                     .next()
                     .and_then(|n| (*n).as_free_cell())
