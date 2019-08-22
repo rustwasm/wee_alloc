@@ -8,8 +8,8 @@ extern crate cfg_if;
 extern crate rand;
 extern crate wee_alloc;
 
-use std::alloc::{Alloc, Layout};
 use quickcheck::{Arbitrary, Gen};
+use std::alloc::{Alloc, Layout};
 use std::f64;
 use std::fs;
 use std::io::Read;
@@ -162,7 +162,8 @@ impl Arbitrary for Operations {
         let prefixes =
             (0..self.0.len()).map(move |i| Operations(ops.iter().cloned().take(i).collect()));
 
-        let free_indices: Vec<_> = self.0
+        let free_indices: Vec<_> = self
+            .0
             .iter()
             .enumerate()
             .filter_map(|(i, op)| if let Free(_) = *op { Some(i) } else { None })
@@ -178,7 +179,8 @@ impl Arbitrary for Operations {
             )
         });
 
-        let alloc_indices: Vec<_> = self.0
+        let alloc_indices: Vec<_> = self
+            .0
             .iter()
             .enumerate()
             .filter_map(|(i, op)| if let Alloc(_) = *op { Some(i) } else { None })
@@ -433,7 +435,8 @@ fn allocate_size_zero() {
             .take(1000)
             .chain((0..1000).map(|i| Free(i)))
             .collect(),
-    ).run_single_threaded();
+    )
+    .run_single_threaded();
 }
 
 #[test]
@@ -447,7 +450,8 @@ fn allocate_many_small() {
             .chain(iter::repeat(Alloc(256 * mem::size_of::<usize>())).take(100))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
-    ).run_single_threaded();
+    )
+    .run_single_threaded();
 }
 
 #[test]
@@ -461,7 +465,8 @@ fn allocate_many_large() {
             .chain(iter::repeat(Alloc(1024 * mem::size_of::<usize>())).take(100))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
-    ).run_single_threaded();
+    )
+    .run_single_threaded();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -475,7 +480,8 @@ fn smoke() {
     let mut a = &wee_alloc::WeeAlloc::INIT;
     unsafe {
         let layout = Layout::new::<u8>();
-        let ptr = a.alloc(layout.clone())
+        let ptr = a
+            .alloc(layout.clone())
             .expect("Should be able to alloc a fresh Layout clone");
         {
             let ptr = ptr.as_ptr() as *mut u8;
@@ -484,7 +490,8 @@ fn smoke() {
         }
         a.dealloc(ptr, layout.clone());
 
-        let ptr = a.alloc(layout.clone())
+        let ptr = a
+            .alloc(layout.clone())
             .expect("Should be able to alloc from a second clone");
         {
             let ptr = ptr.as_ptr() as *mut u8;

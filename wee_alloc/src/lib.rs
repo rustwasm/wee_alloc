@@ -777,10 +777,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         // free list with this new cell, make sure that we allocate enough to
         // fulfill the requested alignment, and still have the minimum cell size
         // left over.
-        let size: Bytes = cmp::max(
-            size.into(),
-            (align + Self::MIN_CELL_SIZE) * Words(2),
-        );
+        let size: Bytes = cmp::max(size.into(), (align + Self::MIN_CELL_SIZE) * Words(2));
 
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
         let new_pages = imp::alloc_pages(pages)?;
@@ -912,9 +909,7 @@ unsafe fn alloc_first_fit<'a>(
 
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
-            return Some(unchecked_unwrap(
-                NonNull::new(allocated.data() as *mut u8),
-            ));
+            return Some(unchecked_unwrap(NonNull::new(allocated.data() as *mut u8)));
         }
 
         None
@@ -1093,7 +1088,8 @@ impl<'a> WeeAlloc<'a> {
                 // immediately, whereas the consolidating with the next adjacent
                 // cell must be delayed, as explained above.
 
-                if let Some(prev) = free.header
+                if let Some(prev) = free
+                    .header
                     .neighbors
                     .prev()
                     .and_then(|p| (*p).as_free_cell())
@@ -1108,7 +1104,8 @@ impl<'a> WeeAlloc<'a> {
                     return;
                 }
 
-                if let Some(next) = free.header
+                if let Some(next) = free
+                    .header
                     .neighbors
                     .next()
                     .and_then(|n| (*n).as_free_cell())

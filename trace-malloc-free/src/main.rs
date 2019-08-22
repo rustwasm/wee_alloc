@@ -41,20 +41,21 @@ main!(|cli: Cli| {
 
     let malloc_re = Regex::new(
         r#"^\-\-\d+\-\- (realloc\(0x0,\d+\))?malloc\((?P<size>\d+)\) = 0x(?P<ptr>\w+)$"#,
-    ).unwrap();
+    )
+    .unwrap();
 
-    let calloc_re = Regex::new(
-        r#"^\-\-\d+\-\- calloc\((?P<num>\d+),(?P<size>\d+)\) = 0x(?P<ptr>\w+)$"#,
-    ).unwrap();
+    let calloc_re =
+        Regex::new(r#"^\-\-\d+\-\- calloc\((?P<num>\d+),(?P<size>\d+)\) = 0x(?P<ptr>\w+)$"#)
+            .unwrap();
 
-    let realloc_re = Regex::new(
-        r#"^\-\-\d+\-\- realloc\(0x(?P<orig>\w+),(?P<size>\d+)\) = 0x(?P<new>\w+)$"#,
-    ).unwrap();
+    let realloc_re =
+        Regex::new(r#"^\-\-\d+\-\- realloc\(0x(?P<orig>\w+),(?P<size>\d+)\) = 0x(?P<new>\w+)$"#)
+            .unwrap();
 
     // TODO: record the requested alignment and replay that as well.
-    let memalign_re = Regex::new(
-        r#"r#"^\-\-\d+\-\- memalign\(al \d+, size (?P<size>\d+)\) = 0x(?P<ptr>\w+)$"#,
-    ).unwrap();
+    let memalign_re =
+        Regex::new(r#"r#"^\-\-\d+\-\- memalign\(al \d+, size (?P<size>\d+)\) = 0x(?P<ptr>\w+)$"#)
+            .unwrap();
 
     let free_re = Regex::new(r#"^\-\-\d+\-\- free\(0x(?P<ptr>\w+)\)$"#).unwrap();
 
