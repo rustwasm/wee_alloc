@@ -780,7 +780,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         let size: Bytes = cmp::max(size.into(), (align + Self::MIN_CELL_SIZE) * Words(2));
 
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
-        let new_pages = imp::alloc_pages(pages)?;
+        let new_pages = imp::alloc_pages(pages, align)?;
         let allocated_size: Bytes = pages.into();
 
         let free_cell = &*FreeCell::from_uninitialized(
