@@ -1,32 +1,38 @@
-use const_init::ConstInit;
 use super::AllocErr;
+use const_init::ConstInit;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
 use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
 use spin::Mutex;
 
-
-const SCRATCH_LEN_BYTES: usize = include!(concat!(env!("OUT_DIR"), "/wee_alloc_static_array_backend_size_bytes.txt"));
+const SCRATCH_LEN_BYTES: usize = include!(concat!(
+    env!("OUT_DIR"),
+    "/wee_alloc_static_array_backend_size_bytes.txt"
+));
 static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
-pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(pages: Pages, align: B) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(
+    pages: Pages,
+    align: B,
+) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
     let mut offset = OFFSET.lock();
     let mut end = bytes.0 + *offset;
     let align = align.into();
 
-    if end < SCRATCH_LEN_BYTES  {
+    if end < SCRATCH_LEN_BYTES {
         let mut ptr: *mut u8;
-        let mut count = 0;
         ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
-        if ptr as usize & (align.0 - 1) != 0{
+        if ptr as usize & (align.0 - 1) != 0 {
             loop {
                 *offset += 1;
                 end += 1;
                 ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
-                if ptr as usize & (align.0 - 1) == 0 { break; }
+                if ptr as usize & (align.0 - 1) == 0 {
+                    break;
+                }
             }
         }
         *offset = end;
@@ -85,8 +91,7 @@ impl<T> Exclusive<T> {
     where
         for<'x> F: FnOnce(&'x mut T) -> U,
     {
-
-       // debug_println!("WIth exclusive access!");
+        // debug_println!("WIth exclusive access!");
         let mut guard = self.inner.lock();
         assert_not_in_use(self);
         set_in_use(self);

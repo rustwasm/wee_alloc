@@ -1,12 +1,15 @@
-use super::{assert_is_word_aligned, PAGE_SIZE, unchecked_unwrap};
-use const_init::ConstInit;
 use super::AllocErr;
+use super::{assert_is_word_aligned, unchecked_unwrap, PAGE_SIZE};
+use const_init::ConstInit;
 use core::arch::wasm32;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
-use memory_units::{Pages, Bytes};
+use memory_units::{Bytes, Pages};
 
-pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(n: Pages, _align: B) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(
+    n: Pages,
+    _align: B,
+) -> Result<NonNull<u8>, AllocErr> {
     let ptr = wasm32::memory_grow(0, n.0);
     if ptr != usize::max_value() {
         let ptr = (ptr * PAGE_SIZE.0) as *mut u8;

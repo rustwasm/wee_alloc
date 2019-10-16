@@ -5,7 +5,10 @@ use core::ptr;
 use libc;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages<B: Into<Bytes>>(pages: Pages, _align: B) -> Result<ptr::NonNull<u8>, AllocErr> {
+pub(crate) fn alloc_pages<B: Into<Bytes>>(
+    pages: Pages,
+    _align: B,
+) -> Result<ptr::NonNull<u8>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();
         let addr = libc::mmap(

@@ -1,5 +1,5 @@
-use const_init::ConstInit;
 use super::AllocErr;
+use const_init::ConstInit;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
@@ -7,7 +7,7 @@ use memory_units::{Bytes, Pages};
 use winapi::shared::ntdef::NULL;
 use winapi::um::memoryapi::VirtualAlloc;
 use winapi::um::synchapi::{
-    SRWLOCK, SRWLOCK_INIT, AcquireSRWLockExclusive, ReleaseSRWLockExclusive,
+    AcquireSRWLockExclusive, ReleaseSRWLockExclusive, SRWLOCK, SRWLOCK_INIT,
 };
 use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
 
