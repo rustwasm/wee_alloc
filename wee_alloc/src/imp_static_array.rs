@@ -24,12 +24,12 @@ pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(pages: Pages, align: B) -> Resu
         if ptr as usize & (align.0 - 1) != 0{
             loop {
                 *offset += 1;
-                count += 1;
-                ptr = SCRATCH_HEAP[*offset..end + count].as_mut_ptr() as *mut u8;
+                end += 1;
+                ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
                 if ptr as usize & (align.0 - 1) == 0 { break; }
             }
         }
-        *offset = end + count;
+        *offset = end;
         NonNull::new(ptr).ok_or_else(|| AllocErr)
     } else {
         Err(AllocErr)

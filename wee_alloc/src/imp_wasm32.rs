@@ -4,9 +4,9 @@ use super::AllocErr;
 use core::arch::wasm32;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
-use memory_units::Pages;
+use memory_units::{Pages, Bytes};
 
-pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(n: Pages, _align: B) -> Result<NonNull<u8>, AllocErr> {
     let ptr = wasm32::memory_grow(0, n.0);
     if ptr != usize::max_value() {
         let ptr = (ptr * PAGE_SIZE.0) as *mut u8;
