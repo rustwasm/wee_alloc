@@ -91,7 +91,6 @@ impl<T> Exclusive<T> {
     where
         for<'x> F: FnOnce(&'x mut T) -> U,
     {
-        // debug_println!("WIth exclusive access!");
         let mut guard = self.inner.lock();
         assert_not_in_use(self);
         set_in_use(self);
