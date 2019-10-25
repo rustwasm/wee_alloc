@@ -14,11 +14,8 @@ const SCRATCH_LEN_BYTES: usize = include!(concat!(
 ));
 
 #[repr(align(4096))]
-struct ScratchHeap([u8; SCRATCH_LEN_BYTES]);// = [0; SCRATCH_LEN_BYTES]);
-
+struct ScratchHeap([u8; SCRATCH_LEN_BYTES]);
 static mut SCRATCH_HEAP: ScratchHeap = ScratchHeap([0; SCRATCH_LEN_BYTES]);
-
-//static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
 
@@ -27,7 +24,7 @@ pub(crate) unsafe fn alloc_pages(
     align: Bytes,
 ) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
-    let offset = OFFSET.lock();
+    let mut offset = OFFSET.lock();
 
     let scratch_heap_start = (SCRATCH_HEAP.0).as_mut_ptr() as usize;
     let scratch_heap_end = scratch_heap_start + (SCRATCH_HEAP.0).len();
