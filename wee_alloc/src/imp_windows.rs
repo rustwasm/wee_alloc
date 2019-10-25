@@ -11,7 +11,7 @@ use winapi::um::synchapi::{
 };
 use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
 
-pub(crate) fn alloc_pages<B: Into<Bytes>>(pages: Pages, _align: B) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) fn alloc_pages(pages: Pages, _align: Bytes) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
     let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) };
     NonNull::new(ptr as *mut u8).ok_or(AllocErr)

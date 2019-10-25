@@ -5,9 +5,9 @@ use core::ptr;
 use libc;
 use memory_units::{Bytes, Pages};
 
-pub(crate) fn alloc_pages<B: Into<Bytes>>(
+pub(crate) fn alloc_pages(
     pages: Pages,
-    _align: B,
+    _align: Bytes,
 ) -> Result<ptr::NonNull<u8>, AllocErr> {
     unsafe {
         let bytes: Bytes = pages.into();

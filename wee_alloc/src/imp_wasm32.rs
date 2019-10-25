@@ -6,9 +6,9 @@ use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
 
-pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(
+pub(crate) unsafe fn alloc_pages(
     n: Pages,
-    _align: B,
+    _align: Bytes,
 ) -> Result<NonNull<u8>, AllocErr> {
     let ptr = wasm32::memory_grow(0, n.0);
     if ptr != usize::max_value() {

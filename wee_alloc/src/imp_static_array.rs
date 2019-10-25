@@ -6,40 +6,49 @@ use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
 use spin::Mutex;
 
+
+
 const SCRATCH_LEN_BYTES: usize = include!(concat!(
     env!("OUT_DIR"),
     "/wee_alloc_static_array_backend_size_bytes.txt"
 ));
-static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
+
+#[repr(align(4096))]
+struct ScratchHeap([u8; SCRATCH_LEN_BYTES]);// = [0; SCRATCH_LEN_BYTES]);
+
+static mut SCRATCH_HEAP: ScratchHeap = ScratchHeap([0; SCRATCH_LEN_BYTES]);
+
+//static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
-pub(crate) unsafe fn alloc_pages<B: Into<Bytes>>(
+
+pub(crate) unsafe fn alloc_pages(
     pages: Pages,
-    align: B,
+    align: Bytes,
 ) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
-    let mut offset = OFFSET.lock();
-    let mut end = bytes.0 + *offset;
-    let align = align.into();
+    let offset = OFFSET.lock();
 
-    if end < SCRATCH_LEN_BYTES {
-        let mut ptr: *mut u8;
-        ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
-        if ptr as usize & (align.0 - 1) != 0 {
-            loop {
-                *offset += 1;
-                end += 1;
-                ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
-                if ptr as usize & (align.0 - 1) == 0 {
-                    break;
-                }
-            }
-        }
-        *offset = end;
-        NonNull::new(ptr).ok_or_else(|| AllocErr)
+    let scratch_heap_start = (SCRATCH_HEAP.0).as_mut_ptr() as usize;
+    let scratch_heap_end = scratch_heap_start + (SCRATCH_HEAP.0).len();
+    let unaligned_end = scratch_heap_start + *offset;
+    let aligned_end = round_up_to_alignment(unaligned_end, align.0);
+    // NB: `unaligned_ptr <= aligned_ptr` handles potential overflow in `round_up_to_alignment`.
+    if unaligned_end <= aligned_end && aligned_end < scratch_heap_end
+        && aligned_end.checked_add(bytes.0).ok_or(AllocErr)? < scratch_heap_end {
+
+        let aligned_ptr = (SCRATCH_HEAP.0)[*offset..aligned_end].as_mut_ptr() as *mut u8;
+        *offset = aligned_end;
+        NonNull::new(aligned_ptr).ok_or_else(|| AllocErr)
     } else {
         Err(AllocErr)
     }
+}
+
+fn round_up_to_alignment(n: usize, align: usize) -> usize {
+    extra_assert!(align > 0);
+    extra_assert!(align.is_power_of_two());
+    (n + align - 1) & !(align - 1)
 }
 
 pub(crate) struct Exclusive<T> {
