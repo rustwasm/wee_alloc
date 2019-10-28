@@ -20,7 +20,7 @@ static mut OFFSET: Mutex<usize> = Mutex::new(0);
 pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
     let mut offset = OFFSET.lock();
-    let end = bytes.0 + *offset;
+    let end = bytes.0.checked_add(*offset).ok_or(AllocErr)?;
     if end < SCRATCH_LEN_BYTES {
         let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr() as *mut u8;
         *offset = end;

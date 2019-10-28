@@ -231,7 +231,7 @@ use core::cmp;
 use core::marker::Sync;
 use core::mem;
 use core::ptr::{self, NonNull};
-use memory_units::{size_of, Bytes, Pages, RoundUpTo, Words};
+use memory_units::{size_of, ByteSize, Bytes, Pages, RoundUpTo, Words};
 use neighbors::Neighbors;
 
 /// The WebAssembly page size, in bytes.
@@ -252,6 +252,19 @@ extra_only! {
             ptr,
             align.0
         );
+    }
+}
+
+#[inline]
+fn checked_round_up_to<T>(b: Bytes) -> Option<T>
+where
+    T: ByteSize,
+    Bytes: RoundUpTo<T>,
+{
+    if b.0.checked_add(T::BYTE_SIZE.0).is_none() {
+        return None;
+    } else {
+        Some(b.round_up_to())
     }
 }
 
@@ -1029,11 +1042,11 @@ impl<'a> WeeAlloc<'a> {
             return Ok(NonNull::new_unchecked(align.0 as *mut u8));
         }
 
-        let size: Words = size.round_up_to();
+        let word_size: Words = checked_round_up_to(size).ok_or(AllocErr)?;
 
-        self.with_free_list_and_policy_for_size(size, align, |head, policy| {
+        self.with_free_list_and_policy_for_size(word_size, align, |head, policy| {
             assert_is_valid_free_list(head.get(), policy);
-            alloc_with_refill(size, align, head, policy)
+            alloc_with_refill(word_size, align, head, policy)
         })
     }
 
