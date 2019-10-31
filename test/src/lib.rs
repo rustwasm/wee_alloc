@@ -502,6 +502,17 @@ fn smoke() {
     }
 }
 
+#[test]
+fn cannot_alloc_max_usize() {
+    let mut a = &wee_alloc::WeeAlloc::INIT;
+    unsafe {
+        let layout = Layout::from_size_align(std::usize::MAX, 1)
+            .expect("should be able to create a `Layout` with size = std::usize::MAX");
+        let result = a.alloc(layout);
+        assert!(result.is_err());
+    }
+}
+
 // This takes too long with our extra assertion checks enabled,
 // and the fixed-sized static array backend is too small.
 #[test]

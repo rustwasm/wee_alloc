@@ -1,21 +1,28 @@
-use const_init::ConstInit;
 use super::AllocErr;
+use const_init::ConstInit;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
 use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
 use spin::Mutex;
 
-const SCRATCH_LEN_BYTES: usize = include!(concat!(env!("OUT_DIR"), "/wee_alloc_static_array_backend_size_bytes.txt"));
-static mut SCRATCH_HEAP: [u8; SCRATCH_LEN_BYTES] = [0; SCRATCH_LEN_BYTES];
+const SCRATCH_LEN_BYTES: usize = include!(concat!(
+    env!("OUT_DIR"),
+    "/wee_alloc_static_array_backend_size_bytes.txt"
+));
+
+#[repr(align(4096))]
+struct ScratchHeap([u8; SCRATCH_LEN_BYTES]);
+
+static mut SCRATCH_HEAP: ScratchHeap = ScratchHeap([0; SCRATCH_LEN_BYTES]);
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
 pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
     let mut offset = OFFSET.lock();
-    let end = bytes.0 + *offset;
+    let end = bytes.0.checked_add(*offset).ok_or(AllocErr)?;
     if end < SCRATCH_LEN_BYTES {
-        let ptr = SCRATCH_HEAP[*offset..end].as_mut_ptr() as *mut u8;
+        let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr() as *mut u8;
         *offset = end;
         NonNull::new(ptr).ok_or_else(|| AllocErr)
     } else {
