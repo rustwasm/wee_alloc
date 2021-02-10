@@ -1,4 +1,4 @@
-use super::{alloc_with_refill, AllocErr, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
+use super::{alloc_with_refill, AllocError, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
 use const_init::ConstInit;
 use core::cell::Cell;
 use core::cmp;
@@ -40,7 +40,7 @@ where
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, AllocErr> {
+    ) -> Result<*const FreeCell<'a>, AllocError> {
         extra_assert!(align.0 > 0);
         extra_assert!(align.0.is_power_of_two());
         extra_assert!(align <= size_of::<usize>());

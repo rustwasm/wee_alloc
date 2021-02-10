@@ -1,5 +1,5 @@
+use super::AllocError;
 use const_init::ConstInit;
-use super::AllocErr;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::{Bytes, Pages};
@@ -7,14 +7,14 @@ use memory_units::{Bytes, Pages};
 use winapi::shared::ntdef::NULL;
 use winapi::um::memoryapi::VirtualAlloc;
 use winapi::um::synchapi::{
-    SRWLOCK, SRWLOCK_INIT, AcquireSRWLockExclusive, ReleaseSRWLockExclusive,
+    AcquireSRWLockExclusive, ReleaseSRWLockExclusive, SRWLOCK, SRWLOCK_INIT,
 };
 use winapi::um::winnt::{MEM_COMMIT, PAGE_READWRITE};
 
-pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocError> {
     let bytes: Bytes = pages.into();
     let ptr = unsafe { VirtualAlloc(NULL, bytes.0, MEM_COMMIT, PAGE_READWRITE) };
-    NonNull::new(ptr as *mut u8).ok_or(AllocErr)
+    NonNull::new(ptr as *mut u8).ok_or(AllocError)
 }
 
 // Align to the cache line size on an i7 to avoid false sharing.

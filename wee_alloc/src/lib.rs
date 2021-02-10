@@ -218,9 +218,9 @@ mod size_classes;
 
 cfg_if! {
     if #[cfg(feature = "nightly")] {
-        use core::alloc::{Alloc, AllocErr};
+        use core::alloc::{Allocator, AllocError};
     } else {
-        pub(crate) struct AllocErr;
+        pub(crate) struct AllocError;
     }
 }
 
@@ -759,7 +759,7 @@ trait AllocPolicy<'a> {
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, AllocErr>;
+    ) -> Result<*const FreeCell<'a>, AllocError>;
 
     fn min_cell_size(&self, alloc_size: Words) -> Words;
 
@@ -785,7 +785,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, AllocErr> {
+    ) -> Result<*const FreeCell<'a>, AllocError> {
         // To assure that an allocation will always succeed after refilling the
         // free list with this new cell, make sure that we allocate enough to
         // fulfill the requested alignment, and still have the minimum cell size
@@ -846,7 +846,7 @@ unsafe fn walk_free_list<'a, F, T>(
     head: &Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
     mut f: F,
-) -> Result<T, AllocErr>
+) -> Result<T, AllocError>
 where
     F: FnMut(&Cell<*const FreeCell<'a>>, &FreeCell<'a>) -> Option<T>,
 {
@@ -859,7 +859,7 @@ where
         assert_local_cell_invariants(&(*current_free).header);
 
         if current_free.is_null() {
-            return Err(AllocErr);
+            return Err(AllocError);
         }
 
         let current_free = Cell::new(current_free);
@@ -914,7 +914,7 @@ unsafe fn alloc_first_fit<'a>(
     align: Bytes,
     head: &Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
-) -> Result<NonNull<u8>, AllocErr> {
+) -> Result<NonNull<u8>, AllocError> {
     extra_assert!(size.0 > 0);
 
     walk_free_list(head, policy, |previous, current| {
@@ -934,7 +934,7 @@ unsafe fn alloc_with_refill<'a, 'b>(
     align: Bytes,
     head: &'b Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
-) -> Result<NonNull<u8>, AllocErr> {
+) -> Result<NonNull<u8>, AllocError> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
     }
@@ -1027,7 +1027,7 @@ impl<'a> WeeAlloc<'a> {
         })
     }
 
-    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
         let size = Bytes(layout.size());
         let align = if layout.align() == 0 {
             Bytes(1)
@@ -1042,7 +1042,7 @@ impl<'a> WeeAlloc<'a> {
             return Ok(NonNull::new_unchecked(align.0 as *mut u8));
         }
 
-        let word_size: Words = checked_round_up_to(size).ok_or(AllocErr)?;
+        let word_size: Words = checked_round_up_to(size).ok_or(AllocError)?;
 
         self.with_free_list_and_policy_for_size(word_size, align, |head, policy| {
             assert_is_valid_free_list(head.get(), policy);
@@ -1142,15 +1142,15 @@ impl<'a> WeeAlloc<'a> {
 }
 
 #[cfg(feature = "nightly")]
-unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
+unsafe impl<'a, 'b> Allocator for &'b WeeAlloc<'a>
 where
     'a: 'b,
 {
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
         self.alloc_impl(layout)
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         self.dealloc_impl(ptr, layout)
     }
 }
@@ -1159,7 +1159,7 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         match self.alloc_impl(layout) {
             Ok(ptr) => ptr.as_ptr(),
-            Err(AllocErr) => ptr::null_mut(),
+            Err(AllocError) => ptr::null_mut(),
         }
     }
 

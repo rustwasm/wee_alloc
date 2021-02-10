@@ -1,4 +1,4 @@
-use super::AllocErr;
+use super::AllocError;
 use const_init::ConstInit;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
@@ -17,16 +17,16 @@ struct ScratchHeap([u8; SCRATCH_LEN_BYTES]);
 static mut SCRATCH_HEAP: ScratchHeap = ScratchHeap([0; SCRATCH_LEN_BYTES]);
 static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
-pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocError> {
     let bytes: Bytes = pages.into();
     let mut offset = OFFSET.lock();
-    let end = bytes.0.checked_add(*offset).ok_or(AllocErr)?;
+    let end = bytes.0.checked_add(*offset).ok_or(AllocError)?;
     if end < SCRATCH_LEN_BYTES {
         let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr() as *mut u8;
         *offset = end;
-        NonNull::new(ptr).ok_or_else(|| AllocErr)
+        NonNull::new(ptr).ok_or_else(|| AllocError)
     } else {
-        Err(AllocErr)
+        Err(AllocError)
     }
 }
 
