@@ -41,7 +41,6 @@ where
         size: Words,
         align: Bytes,
     ) -> Result<*const FreeCell<'a>, AllocError> {
-        extra_assert!(align.0 > 0);
         extra_assert!(align.0.is_power_of_two());
         extra_assert!(align <= size_of::<usize>());
 
@@ -68,12 +67,12 @@ where
         let new_cell_size: Bytes = new_cell_size.into();
 
         let free_cell = FreeCell::from_uninitialized(
-            new_cell,
+            new_cell.as_non_null_ptr(),
             new_cell_size - size_of::<CellHeader>(),
             None,
             self as &dyn AllocPolicy,
         );
-        let next_cell = (new_cell.as_ptr() as *const u8).offset(new_cell_size.0 as isize);
+        let next_cell = (new_cell.as_mut_ptr() as *const u8).offset(new_cell_size.0 as isize);
         (*free_cell)
             .header
             .neighbors

@@ -172,6 +172,8 @@ for hacking!
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
 #![cfg_attr(feature = "nightly", feature(allocator_api, core_intrinsics))]
+#![feature(nonnull_slice_from_raw_parts)]
+#![feature(slice_ptr_get)]
 
 #[macro_use]
 extern crate cfg_if;
@@ -529,7 +531,6 @@ impl<'a> FreeCell<'a> {
         policy: &dyn AllocPolicy<'a>,
     ) -> Option<&'b AllocatedCell<'a>> {
         extra_assert!(alloc_size.0 > 0);
-        extra_assert!(align.0 > 0);
         extra_assert!(align.0.is_power_of_two());
 
         // First, do a quick check that this cell can hold an allocation of the
@@ -914,7 +915,7 @@ unsafe fn alloc_first_fit<'a>(
     align: Bytes,
     head: &Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
-) -> Result<NonNull<u8>, AllocError> {
+) -> Result<NonNull<[u8]>, AllocError> {
     extra_assert!(size.0 > 0);
 
     walk_free_list(head, policy, |previous, current| {
@@ -922,7 +923,9 @@ unsafe fn alloc_first_fit<'a>(
 
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
-            return Some(unchecked_unwrap(NonNull::new(allocated.data() as *mut u8)));
+            let ptr = unchecked_unwrap(NonNull::new(allocated.data() as *mut u8));
+            let slice_len: Bytes = size.into();
+            return Some(NonNull::slice_from_raw_parts(ptr, slice_len.0));
         }
 
         None
@@ -934,7 +937,7 @@ unsafe fn alloc_with_refill<'a, 'b>(
     align: Bytes,
     head: &'b Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
-) -> Result<NonNull<u8>, AllocError> {
+) -> Result<NonNull<[u8]>, AllocError> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
     }
@@ -988,7 +991,7 @@ impl<'a> WeeAlloc<'a> {
         F: for<'b> FnOnce(&'b Cell<*const FreeCell<'a>>, &'b dyn AllocPolicy<'a>) -> T,
     {
         extra_assert!(size.0 > 0);
-        extra_assert!(align.0 > 0);
+        extra_assert!(align.0.is_power_of_two());
 
         if align <= size_of::<usize>() {
             if let Some(head) = self.size_classes.get(size) {
@@ -1027,19 +1030,16 @@ impl<'a> WeeAlloc<'a> {
         })
     }
 
-    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
+    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         let size = Bytes(layout.size());
-        let align = if layout.align() == 0 {
-            Bytes(1)
-        } else {
-            Bytes(layout.align())
-        };
+        let align = Bytes(layout.align());
+        extra_assert!(align.0.is_power_of_two());
 
         if size.0 == 0 {
             // Ensure that our made up pointer is properly aligned by using the
             // alignment as the pointer.
-            extra_assert!(align.0 > 0);
-            return Ok(NonNull::new_unchecked(align.0 as *mut u8));
+            let ptr = NonNull::new_unchecked(align.0 as *mut u8);
+            return Ok(NonNull::slice_from_raw_parts(ptr, 0));
         }
 
         let word_size: Words = checked_round_up_to(size).ok_or(AllocError)?;
@@ -1146,8 +1146,8 @@ unsafe impl<'a, 'b> Allocator for &'b WeeAlloc<'a>
 where
     'a: 'b,
 {
-    fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
-        self.alloc_impl(layout)
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        unsafe { self.alloc_impl(layout) }
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
@@ -1158,7 +1158,7 @@ where
 unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         match self.alloc_impl(layout) {
-            Ok(ptr) => ptr.as_ptr(),
+            Ok(ptr) => ptr.as_mut_ptr(),
             Err(AllocError) => ptr::null_mut(),
         }
     }
