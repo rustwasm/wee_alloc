@@ -172,8 +172,6 @@ for hacking!
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
 #![cfg_attr(feature = "nightly", feature(allocator_api, core_intrinsics))]
-#![feature(nonnull_slice_from_raw_parts)]
-#![feature(slice_ptr_get)]
 
 #[macro_use]
 extern crate cfg_if;
@@ -233,11 +231,32 @@ use core::cmp;
 use core::marker::Sync;
 use core::mem;
 use core::ptr::{self, NonNull};
+use core::slice;
 use memory_units::{size_of, ByteSize, Bytes, Pages, RoundUpTo, Words};
 use neighbors::Neighbors;
 
 /// The WebAssembly page size, in bytes.
 pub const PAGE_SIZE: Bytes = Bytes(65536);
+
+// TODO: replace with NonNull::slice_from_raw_parts once stable
+#[inline]
+fn nonnull_slice_from_raw_parts<T>(data: NonNull<T>, len: usize) -> NonNull<[T]> {
+    unsafe { NonNull::new_unchecked(&mut *slice::from_raw_parts_mut(data.as_ptr(), len)) }
+}
+
+// TODO: replace with ptr.as_non_null_ptr() once stabilized
+#[inline]
+const fn nonnull_slice_as_non_null_ptr<T>(ptr: NonNull<[T]>) -> NonNull<T> {
+    let mut_slice: *mut [T] = ptr.as_ptr();
+    let buff_ptr: *mut T = mut_slice as *mut T;
+    unsafe { NonNull::new_unchecked(buff_ptr) }
+}
+
+// TODO: replace with ptr.as_mut_ptr() once stabilized
+#[inline]
+const fn nonnull_slice_as_mut_ptr<T>(ptr: NonNull<[T]>) -> *mut T {
+    nonnull_slice_as_non_null_ptr(ptr).as_ptr()
+}
 
 extra_only! {
     fn assert_is_word_aligned<T>(ptr: *const T) {
@@ -925,7 +944,7 @@ unsafe fn alloc_first_fit<'a>(
             assert_aligned_to(allocated.data(), align);
             let ptr = unchecked_unwrap(NonNull::new(allocated.data() as *mut u8));
             let slice_len: Bytes = size.into();
-            return Some(NonNull::slice_from_raw_parts(ptr, slice_len.0));
+            return Some(nonnull_slice_from_raw_parts(ptr, slice_len.0));
         }
 
         None
@@ -1039,7 +1058,7 @@ impl<'a> WeeAlloc<'a> {
             // Ensure that our made up pointer is properly aligned by using the
             // alignment as the pointer.
             let ptr = NonNull::new_unchecked(align.0 as *mut u8);
-            return Ok(NonNull::slice_from_raw_parts(ptr, 0));
+            return Ok(nonnull_slice_from_raw_parts(ptr, 0));
         }
 
         let word_size: Words = checked_round_up_to(size).ok_or(AllocError)?;
@@ -1158,7 +1177,7 @@ where
 unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         match self.alloc_impl(layout) {
-            Ok(ptr) => ptr.as_mut_ptr(),
+            Ok(ptr) => nonnull_slice_as_mut_ptr(ptr),
             Err(AllocError) => ptr::null_mut(),
         }
     }
