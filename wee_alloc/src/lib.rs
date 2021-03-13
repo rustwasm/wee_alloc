@@ -65,7 +65,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   nightly Rust.
 
 - **nightly**: Enable usage of nightly-only Rust features, such as implementing
-  the `Alloc` trait (not to be confused with the stable `GlobalAlloc` trait!)
+  the `Allocator` trait (not to be confused with the stable `GlobalAlloc` trait!)
 
 ## Implementation Notes and Constraints
 
