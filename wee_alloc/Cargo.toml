@@ -37,7 +37,7 @@ memory_units = "0.4.0"
 cfg-if = "0.1.2"
 
 [dependencies.spin]
-version = "0.5"
+version = "0.9"
 optional = true
 default-features = false
 
