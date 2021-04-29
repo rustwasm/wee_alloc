@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [dependencies]
 rand = "0.4.2"
-quickcheck = "0.6.0"
+quickcheck = "0.7.1"
 histo = "0.1.0"
 cfg-if = "0.1.2"
 
