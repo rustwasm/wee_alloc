@@ -34,7 +34,7 @@ use_std_for_test_debugging = []
 
 [dependencies]
 memory_units = "0.4.0"
-cfg-if = "0.1.2"
+cfg-if = "1.0.0"
 
 [dependencies.spin]
 version = "0.5"
