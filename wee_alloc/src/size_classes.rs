@@ -1,4 +1,7 @@
-use super::{alloc_with_refill, AllocErr, AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy};
+use super::{
+    alloc_with_refill, nonnull_slice_as_mut_ptr, nonnull_slice_as_non_null_ptr, AllocError,
+    AllocPolicy, CellHeader, FreeCell, LargeAllocPolicy,
+};
 use const_init::ConstInit;
 use core::cell::Cell;
 use core::cmp;
@@ -40,8 +43,7 @@ where
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, AllocErr> {
-        extra_assert!(align.0 > 0);
+    ) -> Result<*const FreeCell<'a>, AllocError> {
         extra_assert!(align.0.is_power_of_two());
         extra_assert!(align <= size_of::<usize>());
 
@@ -68,12 +70,13 @@ where
         let new_cell_size: Bytes = new_cell_size.into();
 
         let free_cell = FreeCell::from_uninitialized(
-            new_cell,
+            nonnull_slice_as_non_null_ptr(new_cell),
             new_cell_size - size_of::<CellHeader>(),
             None,
             self as &dyn AllocPolicy,
         );
-        let next_cell = (new_cell.as_ptr() as *const u8).offset(new_cell_size.0 as isize);
+        let next_cell =
+            (nonnull_slice_as_mut_ptr(new_cell) as *const u8).offset(new_cell_size.0 as isize);
         (*free_cell)
             .header
             .neighbors

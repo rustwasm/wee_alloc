@@ -1,19 +1,19 @@
-use super::{assert_is_word_aligned, PAGE_SIZE, unchecked_unwrap};
+use super::AllocError;
+use super::{assert_is_word_aligned, unchecked_unwrap, PAGE_SIZE};
 use const_init::ConstInit;
-use super::AllocErr;
 use core::arch::wasm32;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::Pages;
 
-pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<u8>, AllocErr> {
+pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<u8>, AllocError> {
     let ptr = wasm32::memory_grow(0, n.0);
     if ptr != usize::max_value() {
         let ptr = (ptr * PAGE_SIZE.0) as *mut u8;
         assert_is_word_aligned(ptr as *mut u8);
         Ok(unchecked_unwrap(NonNull::new(ptr)))
     } else {
-        Err(AllocErr)
+        Err(AllocError)
     }
 }
 

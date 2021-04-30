@@ -5,7 +5,7 @@
   <strong>The <u>W</u>asm-<u>E</u>nabled, <u>E</u>lfin Allocator</strong>
 
   <p>
-    <a href="https://travis-ci.org/rustwasm/wee_alloc"><img src="https://img.shields.io/travis/rustwasm/wee_alloc.svg?style=flat-square" alt="Build Status" /></a>
+    <a href="https://travis-ci.com/rustwasm/wee_alloc"><img src="https://img.shields.io/travis/rustwasm/wee_alloc.svg?style=flat-square" alt="Build Status" /></a>
     <a href="https://ci.appveyor.com/project/fitzgen/wee-alloc/branch/master"><img src="https://img.shields.io/travis/rustwasm/wee_alloc.svg?style=flat-square" alt="Build Status" /></a>
     <a href="https://crates.io/crates/wee_alloc"><img src="https://img.shields.io/crates/v/wee_alloc.svg?style=flat-square" alt="Crates.io version" /></a>
     <a href="https://crates.io/crates/wee_alloc"><img src="https://img.shields.io/crates/d/wee_alloc.svg?style=flat-square" alt="Download" /></a>
@@ -88,7 +88,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   nightly Rust.
 
 - **nightly**: Enable usage of nightly-only Rust features, such as implementing
-  the `Alloc` trait (not to be confused with the stable `GlobalAlloc` trait!)
+  the `Allocator` trait (not to be confused with the stable `GlobalAlloc` trait!)
 
 ### Implementation Notes and Constraints
 

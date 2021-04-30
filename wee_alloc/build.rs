@@ -15,10 +15,14 @@ fn create_static_array_backend_size_bytes_file() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR environment variable not provided");
     let dest_path = Path::new(&out_dir).join("wee_alloc_static_array_backend_size_bytes.txt");
     let size: u32 = match env::var(WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES) {
-        Ok(s) => s.parse().expect("Could not interpret WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES as a 32 bit unsigned integer"),
+        Ok(s) => s.parse().expect(
+            "Could not interpret WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES as a 32 bit unsigned integer",
+        ),
         Err(ve) => match ve {
-            VarError::NotPresent => { DEFAULT_STATIC_ARRAY_BACKEND_SIZE_BYTES },
-            VarError::NotUnicode(_) => { panic!("Could not interpret WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES as a string representing a 32 bit unsigned integer")},
+            VarError::NotPresent => DEFAULT_STATIC_ARRAY_BACKEND_SIZE_BYTES,
+            VarError::NotUnicode(_) => {
+                panic!("Could not interpret WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES as a string representing a 32 bit unsigned integer")
+            }
         },
     };
     let mut f = File::create(&dest_path)

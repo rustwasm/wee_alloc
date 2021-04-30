@@ -1,4 +1,5 @@
 #![feature(allocator_api)]
+#![feature(slice_ptr_get)]
 
 extern crate histo;
 #[macro_use]
@@ -9,7 +10,7 @@ extern crate rand;
 extern crate wee_alloc;
 
 use quickcheck::{Arbitrary, Gen};
-use std::alloc::{Alloc, Layout};
+use std::alloc::{Allocator, Layout};
 use std::f64;
 use std::fs;
 use std::io::Read;
@@ -20,7 +21,7 @@ use std::str::FromStr;
 #[derive(Debug, Clone, Copy)]
 pub enum Operation {
     // Allocate this many bytes.
-    Alloc(usize),
+    Allocator(usize),
 
     // Free the n^th allocation we've made, or no-op if there it has already
     // been freed.
@@ -41,7 +42,7 @@ impl Operation {
 
         // Zero sized allocation 1/1000 times.
         if g.gen_weighted_bool(1000) {
-            return Alloc(0);
+            return Allocator(0);
         }
 
         // XXX: Keep this synced with `wee_alloc`.
@@ -53,14 +54,14 @@ impl Operation {
         if g.gen_weighted_bool(20) {
             let n =
                 g.gen_range(1, 10) * max_small_alloc_size + g.gen_range(0, max_small_alloc_size);
-            return Alloc(n);
+            return Allocator(n);
         }
 
         // Small allocation.
         if g.gen() {
-            Alloc(g.gen_range(12, 17))
+            Allocator(g.gen_range(12, 17))
         } else {
-            Alloc(max_small_alloc_size)
+            Allocator(max_small_alloc_size)
         }
     }
 
@@ -80,7 +81,7 @@ impl FromStr for Operation {
             let start = "Alloc(".len();
             let end = s.len() - "),".len();
             let n: usize = s[start..end].parse().map_err(|_| ())?;
-            return Ok(Alloc(n));
+            return Ok(Allocator(n));
         }
 
         if s.starts_with("Free(") && s.ends_with("),") {
@@ -183,7 +184,13 @@ impl Arbitrary for Operations {
             .0
             .iter()
             .enumerate()
-            .filter_map(|(i, op)| if let Alloc(_) = *op { Some(i) } else { None })
+            .filter_map(|(i, op)| {
+                if let Allocator(_) = *op {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
             .collect();
 
         let ops = self.0.clone();
@@ -217,11 +224,11 @@ impl Arbitrary for Operations {
                     .enumerate()
                     .filter_map(|(j, op)| {
                         if i == j {
-                            if let Alloc(size) = *op {
+                            if let Allocator(size) = *op {
                                 if size == 0 {
                                     None
                                 } else {
-                                    Some(Alloc(size / 2))
+                                    Some(Allocator(size / 2))
                                 }
                             } else {
                                 Some(*op)
@@ -266,13 +273,13 @@ impl Operations {
         handle3.join().expect("Thread 3 Failed");
     }
 
-    pub fn run_with_allocator<A: Alloc>(&self, mut a: A) {
+    pub fn run_with_allocator<A: Allocator>(&self, a: A) {
         let mut allocs = vec![];
         for op in self.0.iter().cloned() {
             match op {
-                Alloc(n) => {
+                Allocator(n) => {
                     let layout = Layout::from_size_align(n, mem::size_of::<usize>()).unwrap();
-                    allocs.push(match unsafe { a.alloc(layout.clone()) } {
+                    allocs.push(match a.allocate(layout.clone()) {
                         Ok(ptr) => Some((ptr, layout)),
                         Err(_) => None,
                     });
@@ -281,7 +288,7 @@ impl Operations {
                     if let Some(entry) = allocs.get_mut(idx) {
                         if let Some((ptr, layout)) = entry.take() {
                             unsafe {
-                                a.dealloc(ptr, layout);
+                                a.deallocate(ptr.as_non_null_ptr(), layout);
                             }
                         }
                     }
@@ -295,7 +302,7 @@ impl Operations {
     pub fn size_histogram(&self) -> histo::Histogram {
         let mut histogram = histo::Histogram::with_buckets(Self::NUM_BUCKETS);
         for op in &self.0 {
-            if let Alloc(n) = *op {
+            if let Allocator(n) = *op {
                 let n = n as f64;
                 let n = n.log2().round();
                 histogram.add(n as u64);
@@ -374,9 +381,9 @@ quickcheck! {
         let size = size % 65536;
         let align = ALIGNS[align % ALIGNS.len()];
 
-        let mut w = &wee_alloc::WeeAlloc::INIT;
+        let w = &wee_alloc::WeeAlloc::INIT;
         let layout = Layout::from_size_align(size, align).unwrap();
-        let _ = unsafe { w.alloc(layout) };
+        let _ = w.allocate(layout);
     }
 }
 
@@ -409,29 +416,36 @@ test_trace!(test_trace_source_map, "../traces/source-map.trace");
 
 #[test]
 fn regression_test_0() {
-    Operations(vec![Alloc(1)]).run_single_threaded();
+    Operations(vec![Allocator(1)]).run_single_threaded();
 }
 
 #[test]
 fn regression_test_1() {
-    Operations(vec![Alloc(1414), Free(0), Alloc(1414), Free(1)]).run_single_threaded();
+    Operations(vec![Allocator(1414), Free(0), Allocator(1414), Free(1)]).run_single_threaded();
 }
 
 #[test]
 fn regression_test_2() {
-    Operations(vec![Alloc(168), Free(0), Alloc(0), Alloc(168), Free(2)]).run_single_threaded();
+    Operations(vec![
+        Allocator(168),
+        Free(0),
+        Allocator(0),
+        Allocator(168),
+        Free(2),
+    ])
+    .run_single_threaded();
 }
 
 #[test]
 fn regression_test_3() {
-    Operations(vec![Alloc(13672), Free(0), Alloc(1)]).run_single_threaded();
+    Operations(vec![Allocator(13672), Free(0), Allocator(1)]).run_single_threaded();
 }
 
 #[test]
 fn allocate_size_zero() {
     use std::iter;
     Operations(
-        iter::repeat(Alloc(0))
+        iter::repeat(Allocator(0))
             .take(1000)
             .chain((0..1000).map(|i| Free(i)))
             .collect(),
@@ -444,10 +458,10 @@ fn allocate_many_small() {
     use std::iter;
 
     Operations(
-        iter::repeat(Alloc(16 * mem::size_of::<usize>()))
+        iter::repeat(Allocator(16 * mem::size_of::<usize>()))
             .take(100)
             .chain((0..100).map(|i| Free(i)))
-            .chain(iter::repeat(Alloc(256 * mem::size_of::<usize>())).take(100))
+            .chain(iter::repeat(Allocator(256 * mem::size_of::<usize>())).take(100))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
     )
@@ -459,10 +473,10 @@ fn allocate_many_large() {
     use std::iter;
 
     Operations(
-        iter::repeat(Alloc(257 * mem::size_of::<usize>()))
+        iter::repeat(Allocator(257 * mem::size_of::<usize>()))
             .take(100)
             .chain((0..100).map(|i| Free(i)))
-            .chain(iter::repeat(Alloc(1024 * mem::size_of::<usize>())).take(100))
+            .chain(iter::repeat(Allocator(1024 * mem::size_of::<usize>())).take(100))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
     )
@@ -477,40 +491,38 @@ fn allocate_many_large() {
 
 #[test]
 fn smoke() {
-    let mut a = &wee_alloc::WeeAlloc::INIT;
+    let a = &wee_alloc::WeeAlloc::INIT;
     unsafe {
         let layout = Layout::new::<u8>();
         let ptr = a
-            .alloc(layout.clone())
+            .allocate(layout.clone())
             .expect("Should be able to alloc a fresh Layout clone");
         {
-            let ptr = ptr.as_ptr() as *mut u8;
+            let ptr = ptr.as_mut_ptr();
             *ptr = 9;
             assert_eq!(*ptr, 9);
         }
-        a.dealloc(ptr, layout.clone());
+        a.deallocate(ptr.as_non_null_ptr(), layout.clone());
 
         let ptr = a
-            .alloc(layout.clone())
+            .allocate(layout.clone())
             .expect("Should be able to alloc from a second clone");
         {
-            let ptr = ptr.as_ptr() as *mut u8;
+            let ptr = ptr.as_mut_ptr();
             *ptr = 10;
             assert_eq!(*ptr, 10);
         }
-        a.dealloc(ptr, layout.clone());
+        a.deallocate(ptr.as_non_null_ptr(), layout.clone());
     }
 }
 
 #[test]
 fn cannot_alloc_max_usize() {
-    let mut a = &wee_alloc::WeeAlloc::INIT;
-    unsafe {
-        let layout = Layout::from_size_align(std::usize::MAX, 1)
-            .expect("should be able to create a `Layout` with size = std::usize::MAX");
-        let result = a.alloc(layout);
-        assert!(result.is_err());
-    }
+    let a = &wee_alloc::WeeAlloc::INIT;
+    let layout = Layout::from_size_align(std::usize::MAX, 1)
+        .expect("should be able to create a `Layout` with size = std::usize::MAX");
+    let result = a.allocate(layout);
+    assert!(result.is_err());
 }
 
 // This takes too long with our extra assertion checks enabled,
@@ -521,17 +533,17 @@ fn stress() {
     use rand::Rng;
     use std::cmp;
 
-    let mut a = &wee_alloc::WeeAlloc::INIT;
+    let a = &wee_alloc::WeeAlloc::INIT;
     let mut rng = rand::weak_rng();
-    let mut ptrs = Vec::new();
+    let mut ptrs: Vec<(_, Layout)> = Vec::new();
     unsafe {
         for _ in 0..100_000 {
             let free =
                 ptrs.len() > 0 && ((ptrs.len() < 1_000 && rng.gen_weighted_bool(3)) || rng.gen());
             if free {
                 let idx = rng.gen_range(0, ptrs.len());
-                let (ptr, layout): (_, Layout) = ptrs.swap_remove(idx);
-                a.dealloc(ptr, layout);
+                let (ptr, layout): (std::ptr::NonNull<[u8]>, Layout) = ptrs.swap_remove(idx);
+                a.deallocate(ptr.as_non_null_ptr(), layout);
                 continue;
             }
 
@@ -549,11 +561,15 @@ fn stress() {
                 };
                 let mut tmp = Vec::new();
                 for i in 0..cmp::min(old.size(), new.size()) {
-                    tmp.push(*(ptr.as_ptr() as *mut u8).offset(i as isize));
+                    tmp.push(*(ptr.as_mut_ptr()).offset(i as isize));
                 }
-                let ptr = a.realloc(ptr, old, new.size()).unwrap();
+                let ptr = if new.size() >= old.size() {
+                    a.grow(ptr.as_non_null_ptr(), old, new).unwrap()
+                } else {
+                    a.shrink(ptr.as_non_null_ptr(), old, new).unwrap()
+                };
                 for (i, byte) in tmp.iter().enumerate() {
-                    assert_eq!(*byte, *(ptr.as_ptr() as *mut u8).offset(i as isize));
+                    assert_eq!(*byte, *(ptr.as_mut_ptr()).offset(i as isize));
                 }
                 ptrs.push((ptr, new));
             }
@@ -569,15 +585,15 @@ fn stress() {
             let layout = Layout::from_size_align(size, align).unwrap();
 
             let ptr = if zero {
-                a.alloc_zeroed(layout.clone()).unwrap()
+                a.allocate_zeroed(layout.clone()).unwrap()
             } else {
-                a.alloc(layout.clone()).unwrap()
+                a.allocate(layout.clone()).unwrap()
             };
             for i in 0..layout.size() {
                 if zero {
-                    assert_eq!(*(ptr.as_ptr() as *mut u8).offset(i as isize), 0);
+                    assert_eq!(*(ptr.as_mut_ptr()).offset(i as isize), 0);
                 }
-                *(ptr.as_ptr() as *mut u8).offset(i as isize) = 0xce;
+                *(ptr.as_mut_ptr()).offset(i as isize) = 0xce;
             }
             ptrs.push((ptr, layout));
         }

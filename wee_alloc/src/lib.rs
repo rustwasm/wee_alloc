@@ -65,7 +65,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   nightly Rust.
 
 - **nightly**: Enable usage of nightly-only Rust features, such as implementing
-  the `Alloc` trait (not to be confused with the stable `GlobalAlloc` trait!)
+  the `Allocator` trait (not to be confused with the stable `GlobalAlloc` trait!)
 
 ## Implementation Notes and Constraints
 
@@ -218,9 +218,9 @@ mod size_classes;
 
 cfg_if! {
     if #[cfg(feature = "nightly")] {
-        use core::alloc::{Alloc, AllocErr};
+        use core::alloc::{Allocator, AllocError};
     } else {
-        pub(crate) struct AllocErr;
+        pub(crate) struct AllocError;
     }
 }
 
@@ -231,11 +231,32 @@ use core::cmp;
 use core::marker::Sync;
 use core::mem;
 use core::ptr::{self, NonNull};
+use core::slice;
 use memory_units::{size_of, ByteSize, Bytes, Pages, RoundUpTo, Words};
 use neighbors::Neighbors;
 
 /// The WebAssembly page size, in bytes.
 pub const PAGE_SIZE: Bytes = Bytes(65536);
+
+// TODO: replace with NonNull::slice_from_raw_parts once stable
+#[inline]
+fn nonnull_slice_from_raw_parts<T>(data: NonNull<T>, len: usize) -> NonNull<[T]> {
+    unsafe { NonNull::new_unchecked(&mut *slice::from_raw_parts_mut(data.as_ptr(), len)) }
+}
+
+// TODO: replace with ptr.as_non_null_ptr() once stabilized
+#[inline]
+const fn nonnull_slice_as_non_null_ptr<T>(ptr: NonNull<[T]>) -> NonNull<T> {
+    let mut_slice: *mut [T] = ptr.as_ptr();
+    let buff_ptr: *mut T = mut_slice as *mut T;
+    unsafe { NonNull::new_unchecked(buff_ptr) }
+}
+
+// TODO: replace with ptr.as_mut_ptr() once stabilized
+#[inline]
+const fn nonnull_slice_as_mut_ptr<T>(ptr: NonNull<[T]>) -> *mut T {
+    nonnull_slice_as_non_null_ptr(ptr).as_ptr()
+}
 
 extra_only! {
     fn assert_is_word_aligned<T>(ptr: *const T) {
@@ -529,7 +550,6 @@ impl<'a> FreeCell<'a> {
         policy: &dyn AllocPolicy<'a>,
     ) -> Option<&'b AllocatedCell<'a>> {
         extra_assert!(alloc_size.0 > 0);
-        extra_assert!(align.0 > 0);
         extra_assert!(align.0.is_power_of_two());
 
         // First, do a quick check that this cell can hold an allocation of the
@@ -759,7 +779,7 @@ trait AllocPolicy<'a> {
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, AllocErr>;
+    ) -> Result<*const FreeCell<'a>, AllocError>;
 
     fn min_cell_size(&self, alloc_size: Words) -> Words;
 
@@ -785,7 +805,7 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         &self,
         size: Words,
         align: Bytes,
-    ) -> Result<*const FreeCell<'a>, AllocErr> {
+    ) -> Result<*const FreeCell<'a>, AllocError> {
         // To assure that an allocation will always succeed after refilling the
         // free list with this new cell, make sure that we allocate enough to
         // fulfill the requested alignment, and still have the minimum cell size
@@ -846,7 +866,7 @@ unsafe fn walk_free_list<'a, F, T>(
     head: &Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
     mut f: F,
-) -> Result<T, AllocErr>
+) -> Result<T, AllocError>
 where
     F: FnMut(&Cell<*const FreeCell<'a>>, &FreeCell<'a>) -> Option<T>,
 {
@@ -859,7 +879,7 @@ where
         assert_local_cell_invariants(&(*current_free).header);
 
         if current_free.is_null() {
-            return Err(AllocErr);
+            return Err(AllocError);
         }
 
         let current_free = Cell::new(current_free);
@@ -914,7 +934,7 @@ unsafe fn alloc_first_fit<'a>(
     align: Bytes,
     head: &Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
-) -> Result<NonNull<u8>, AllocErr> {
+) -> Result<NonNull<[u8]>, AllocError> {
     extra_assert!(size.0 > 0);
 
     walk_free_list(head, policy, |previous, current| {
@@ -922,7 +942,9 @@ unsafe fn alloc_first_fit<'a>(
 
         if let Some(allocated) = current.try_alloc(previous, size, align, policy) {
             assert_aligned_to(allocated.data(), align);
-            return Some(unchecked_unwrap(NonNull::new(allocated.data() as *mut u8)));
+            let ptr = unchecked_unwrap(NonNull::new(allocated.data() as *mut u8));
+            let slice_len: Bytes = size.into();
+            return Some(nonnull_slice_from_raw_parts(ptr, slice_len.0));
         }
 
         None
@@ -934,7 +956,7 @@ unsafe fn alloc_with_refill<'a, 'b>(
     align: Bytes,
     head: &'b Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
-) -> Result<NonNull<u8>, AllocErr> {
+) -> Result<NonNull<[u8]>, AllocError> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
         return Ok(result);
     }
@@ -988,7 +1010,7 @@ impl<'a> WeeAlloc<'a> {
         F: for<'b> FnOnce(&'b Cell<*const FreeCell<'a>>, &'b dyn AllocPolicy<'a>) -> T,
     {
         extra_assert!(size.0 > 0);
-        extra_assert!(align.0 > 0);
+        extra_assert!(align.0.is_power_of_two());
 
         if align <= size_of::<usize>() {
             if let Some(head) = self.size_classes.get(size) {
@@ -1027,22 +1049,19 @@ impl<'a> WeeAlloc<'a> {
         })
     }
 
-    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+    unsafe fn alloc_impl(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         let size = Bytes(layout.size());
-        let align = if layout.align() == 0 {
-            Bytes(1)
-        } else {
-            Bytes(layout.align())
-        };
+        let align = Bytes(layout.align());
+        extra_assert!(align.0.is_power_of_two());
 
         if size.0 == 0 {
             // Ensure that our made up pointer is properly aligned by using the
             // alignment as the pointer.
-            extra_assert!(align.0 > 0);
-            return Ok(NonNull::new_unchecked(align.0 as *mut u8));
+            let ptr = NonNull::new_unchecked(align.0 as *mut u8);
+            return Ok(nonnull_slice_from_raw_parts(ptr, 0));
         }
 
-        let word_size: Words = checked_round_up_to(size).ok_or(AllocErr)?;
+        let word_size: Words = checked_round_up_to(size).ok_or(AllocError)?;
 
         self.with_free_list_and_policy_for_size(word_size, align, |head, policy| {
             assert_is_valid_free_list(head.get(), policy);
@@ -1142,15 +1161,15 @@ impl<'a> WeeAlloc<'a> {
 }
 
 #[cfg(feature = "nightly")]
-unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
+unsafe impl<'a, 'b> Allocator for &'b WeeAlloc<'a>
 where
     'a: 'b,
 {
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
-        self.alloc_impl(layout)
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        unsafe { self.alloc_impl(layout) }
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         self.dealloc_impl(ptr, layout)
     }
 }
@@ -1158,8 +1177,8 @@ where
 unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         match self.alloc_impl(layout) {
-            Ok(ptr) => ptr.as_ptr(),
-            Err(AllocErr) => ptr::null_mut(),
+            Ok(ptr) => nonnull_slice_as_mut_ptr(ptr),
+            Err(AllocError) => ptr::null_mut(),
         }
     }
 
