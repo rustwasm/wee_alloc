@@ -6,6 +6,9 @@ use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use memory_units::Pages;
 
+#[cfg(feature = "extra_assertions")]
+use core::cell::Cell;
+
 pub(crate) unsafe fn alloc_pages(n: Pages) -> Result<NonNull<u8>, AllocErr> {
     let ptr = wasm32::memory_grow(0, n.0);
     if ptr != usize::max_value() {
@@ -35,7 +38,7 @@ impl<T: ConstInit> ConstInit for Exclusive<T> {
 
 extra_only! {
     fn assert_not_in_use<T>(excl: &Exclusive<T>) {
-        assert!(!excl.in_use, "`Exclusive<T>` is not re-entrant");
+        assert!(!excl.in_use.get(), "`Exclusive<T>` is not re-entrant");
     }
 }
 
