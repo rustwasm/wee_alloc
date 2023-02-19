@@ -36,7 +36,7 @@ Released 2018/06/15.
 Released 2018/05/01.
 
 * Added support for allocating out of a static array heap. This enables using
-  `wee_alloc` in embdedded and bare-metal environments.
+  `wee_alloc` in embedded and bare-metal environments.
 
 * Added @ZackPierce to the `wee_alloc` team \o/
 
