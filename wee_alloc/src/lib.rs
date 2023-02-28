@@ -186,22 +186,27 @@ extern crate spin;
 
 extern crate memory_units;
 
+#[deprecated(note = "this crate is deprecated and has major bugs")]
 #[macro_use]
 mod extra_assert;
 
 cfg_if! {
     if #[cfg(feature = "static_array_backend")] {
+        #[deprecated(note = "this crate is deprecated and has major bugs")]
         mod imp_static_array;
         use imp_static_array as imp;
     } else if #[cfg(target_arch = "wasm32")] {
+        #[deprecated(note = "this crate is deprecated and has major bugs")]
         mod imp_wasm32;
         use imp_wasm32 as imp;
     } else if #[cfg(unix)] {
         extern crate libc;
+        #[deprecated(note = "this crate is deprecated and has major bugs")]
         mod imp_unix;
         use imp_unix as imp;
     } else if #[cfg(windows)] {
         extern crate winapi;
+        #[deprecated(note = "this crate is deprecated and has major bugs")]
         mod imp_windows;
         use imp_windows as imp;
     } else {
@@ -211,8 +216,11 @@ cfg_if! {
     }
 }
 
+#[deprecated(note = "this crate is deprecated and has major bugs")]
 mod const_init;
+#[deprecated(note = "this crate is deprecated and has major bugs")]
 mod neighbors;
+#[deprecated(note = "this crate is deprecated and has major bugs")]
 #[cfg(feature = "size_classes")]
 mod size_classes;
 
